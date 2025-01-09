@@ -1,0 +1,26 @@
+global_var userNameRankSystem
+value: json obj, key: value
+
+NuboHeimer:
+[
+    {
+        "Key":"SeviceNameWatchTime",
+        "Value":"35456453248"
+    },
+    {
+        "Key":"SeviceNameMessageCount",
+        "Value":"456456456"
+    },
+    {
+        "Key":"SeviceNameFollowAge",
+        "Value":"456456456"
+    },
+    {
+        "Key":"SeviceNameCoins",
+        "Value":"456456456"
+    },
+    {
+        "Key":"SeviceNameRank",
+        "Value":"456456456"
+    }
+]
