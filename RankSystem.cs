@@ -11,6 +11,10 @@ using Newtonsoft.Json;
 
 public class CPHInline
 {
+
+    private bool InitializeUserGlobalVar(string viewerVariableName){
+        return true;
+    }
     public bool AddWatchTime()
     {
         string eventSource = "Test";
@@ -26,7 +30,6 @@ public class CPHInline
         }
         else
             eventSource = args["eventSource"].ToString();
-        CPH.SetArgument("TEST", eventSource);
         if (args.ContainsKey("users"))
         {
             var currentViewers = (List<Dictionary<string, object>>)args["users"];
@@ -44,10 +47,8 @@ public class CPHInline
                 }
 
                 string viewerVariableName = viewerName + "RankSystem";
-                CPH.LogError(viewerVariableName);
                 if (CPH.GetGlobalVar<string>(viewerVariableName, true) == null)
                 {
-                    CPH.LogError("Не найдена переменная для " + viewerVariableName);
                     userRankCollection = new List<KeyValuePair<string, string>>();
                     userRankCollection.Add(new KeyValuePair<string, string>(eventSource + "WatchTime", "0"));
                     userRankCollection.Add(new KeyValuePair<string, string>(eventSource + "MessageCount", "0"));
