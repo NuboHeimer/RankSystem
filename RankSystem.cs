@@ -82,25 +82,28 @@ public class CPHInline
 
     public bool GetWatchTime()
     {
-        if (CPH.TryGetArg("commandSource", out string commandSource))
-        {
-        }
-        else
+        if (!CPH.TryGetArg("commandSource", out string commandSource))
             return false;
-        if (CPH.TryGetArg("userName", out string userName))
-        {
-        }
-        else
+
+        if (!CPH.TryGetArg("userName", out string userName))
             return false;
+
         string viewerVariableName = userName + "RankSystem";
         var userRankCollection = new List<KeyValuePair<string, string>>();
-        string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
+
+        if (CPH.GetGlobalVar<string>(viewerVariableName, true) != null)
+        {string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
         userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
         string keyToShow = commandSource + "WatchTime";
         int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToShow);
         if (index != -1)
         {
             CPH.SetArgument("userWatchTime", userRankCollection[index].Value);
+        } else {
+            CPH.SetArgument("userWatchTime", "Пользователь не найден!");
+        }
+        } else {
+            CPH.SetArgument("userWatchTime", "Пользователь не найден!");
         }
 
         return true;
