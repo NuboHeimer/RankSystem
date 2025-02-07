@@ -24,3 +24,8 @@ NuboHeimer:
         "Value":"456456456"
     }
 ]
+
+userRankCollection.Add(new KeyValuePair<string, string>(eventSource + "WatchTime", "0"));
+userRankCollection.Add(new KeyValuePair<string, string>(eventSource + "MessageCount", "0"));
+userRankCollection.Add(new KeyValuePair<string, string>(eventSource + "FollowDate", null));
+userRankCollection.Add(new KeyValuePair<string, string>(eventSource + "Rank", null));
