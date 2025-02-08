@@ -16,7 +16,7 @@ NuboHeimer:
         "Value":"456456456"
     },
     {
-        "Key":"SeviceNameCoins",
+        "Key":"Coins",
         "Value":"456456456"
     },
     {

@@ -18,7 +18,9 @@ public class CPHInline
         userRankCollection.Add(new KeyValuePair<string, string>(eventSource + "MessageCount", "0"));
         userRankCollection.Add(new KeyValuePair<string, string>(eventSource + "FollowDate", null));
         userRankCollection.Add(new KeyValuePair<string, string>(eventSource + "Rank", null));
+
         CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
+
         return true;
     }
 
@@ -40,8 +42,13 @@ public class CPHInline
         if (args.ContainsKey("users"))
         {
             var currentViewers = (List<Dictionary<string, object>>)args["users"];
+
             if (currentViewers.Count == 0)
                 return true; // выходим, если в списке нет зрителей.
+
+            if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
+                coinsToAdd = 0;
+
             foreach (var viewer in currentViewers)
             {
                 string viewerName = viewer["userName"].ToString().ToLower();
@@ -53,20 +60,18 @@ public class CPHInline
                 }
 
                 string viewerVariableName = viewerName + "RankSystem";
+
                 if (CPH.GetGlobalVar<string>(viewerVariableName, true) == null)
-                {
                     InitializeUserGlobalVar(viewerVariableName, eventSource);
-                }
 
                 string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
                 userRankCollection = new List<KeyValuePair<string, string>>();
                 userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
                 string keyToUpdate = eventSource + "WatchTime";
                 int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToUpdate);
+                
                 if (index == -1)
-                {
-                    userRankCollection.Add(new KeyValuePair<string, string>(eventSource + "WatchTime", "60"));
-                }
+                    userRankCollection.Add(new KeyValuePair<string, string>(keyToUpdate, "60"));
 
                 if (index != -1)
                 {
@@ -75,6 +80,8 @@ public class CPHInline
                 }
 
                 CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
+                if (coinsToAdd > 0)
+                    AddCoins(coinsToAdd, eventSource, viewerName);
             }
         }
 
@@ -94,24 +101,79 @@ public class CPHInline
         }
 
         string viewerVariableName = userName + "RankSystem";
+        
         if (CPH.GetGlobalVar<string>(viewerVariableName, true) == null)
-        {
             InitializeUserGlobalVar(viewerVariableName, eventSource);
-        }
 
         string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
         userRankCollection = new List<KeyValuePair<string, string>>();
         userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
         string keyToUpdate = eventSource + "MessageCount";
         int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToUpdate);
+        
         if (index == -1)
-        {
-            userRankCollection.Add(new KeyValuePair<string, string>(eventSource + "MessageCount", "1"));
-        }
+            userRankCollection.Add(new KeyValuePair<string, string>(keyToUpdate, "1"));
 
         if (index != -1)
         {
             string newValue = (int.Parse(userRankCollection[index].Value) + 1).ToString();
+            userRankCollection[index] = new KeyValuePair<string, string>(keyToUpdate, newValue);
+        }
+
+        CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
+
+        return true;
+    }
+
+    public bool AddFollowDate()
+    {
+        var userRankCollection = new List<KeyValuePair<string, string>>();
+        string eventSource = args["eventSource"].ToString();
+        string userName = args["userName"].ToString().ToLower();
+        string viewerVariableName = userName + "RankSystem";
+        
+        if (CPH.GetGlobalVar<string>(viewerVariableName, true) == null)
+            InitializeUserGlobalVar(viewerVariableName, eventSource);
+
+        string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
+        userRankCollection = new List<KeyValuePair<string, string>>();
+        userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
+        string keyToUpdate = eventSource + "FollowDate";
+        int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToUpdate);
+        
+        if (index == -1)
+            userRankCollection.Add(new KeyValuePair<string, string>(keyToUpdate, DateTime.Now.ToString()));
+
+        if (index != -1)
+        {
+            string newValue = DateTime.Now.ToString();
+            userRankCollection[index] = new KeyValuePair<string, string>(keyToUpdate, newValue);
+        }
+
+        CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
+        return true;
+    }
+
+    private bool AddCoins(int coinsToAdd, string eventSource, string targetUser)
+    {
+        var userRankCollection = new List<KeyValuePair<string, string>>();
+        string viewerVariableName = targetUser + "RankSystem";
+        
+        if (CPH.GetGlobalVar<string>(viewerVariableName, true) == null)
+            InitializeUserGlobalVar(viewerVariableName, eventSource);
+
+        string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
+        userRankCollection = new List<KeyValuePair<string, string>>();
+        userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
+        string keyToUpdate = "Coins";
+        int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToUpdate);
+        
+        if (index == -1)
+            userRankCollection.Add(new KeyValuePair<string, string>(keyToUpdate, coinsToAdd.ToString()));
+
+        if (index != -1)
+        {
+            string newValue = (int.Parse(userRankCollection[index].Value) + coinsToAdd).ToString();
             userRankCollection[index] = new KeyValuePair<string, string>(keyToUpdate, newValue);
         }
 
@@ -123,10 +185,13 @@ public class CPHInline
     {
         if (!CPH.TryGetArg("commandSource", out string commandSource))
             return false;
+
         if (!CPH.TryGetArg("userName", out string userName))
             return false;
+
         string viewerVariableName = userName + "RankSystem";
         var userRankCollection = new List<KeyValuePair<string, string>>();
+        
         if (CPH.GetGlobalVar<string>(viewerVariableName, true) != null)
         {
             string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
@@ -134,18 +199,12 @@ public class CPHInline
             string keyToShow = commandSource + "WatchTime";
             int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToShow);
             if (index != -1)
-            {
                 CPH.SetArgument("userWatchTime", userRankCollection[index].Value);
-            }
             else
-            {
                 CPH.SetArgument("userWatchTime", "Пользователь не найден!");
-            }
         }
         else
-        {
             CPH.SetArgument("userWatchTime", "Пользователь не найден!");
-        }
 
         return true;
     }
