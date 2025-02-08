@@ -11,8 +11,8 @@ using Newtonsoft.Json;
 
 public class CPHInline
 {
-
-    private bool InitializeUserGlobalVar(string viewerVariableName, string eventSource){
+    private bool InitializeUserGlobalVar(string viewerVariableName, string eventSource)
+    {
         var userRankCollection = new List<KeyValuePair<string, string>>();
         userRankCollection.Add(new KeyValuePair<string, string>(eventSource + "WatchTime", "0"));
         userRankCollection.Add(new KeyValuePair<string, string>(eventSource + "MessageCount", "0"));
@@ -21,6 +21,7 @@ public class CPHInline
         CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
         return true;
     }
+
     public bool AddWatchTime()
     {
         string eventSource = "Test";
@@ -57,52 +58,92 @@ public class CPHInline
                     InitializeUserGlobalVar(viewerVariableName, eventSource);
                 }
 
-                    string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
-                    userRankCollection = new List<KeyValuePair<string, string>>();
-                    userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
-                    string keyToUpdate = eventSource + "WatchTime";
-                    string newValue = (int.Parse(userRankCollection[0].Value) + 60).ToString();
-                    int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToUpdate);
-                    if (index == -1)
-                    {
-                        userRankCollection.Add(new KeyValuePair<string, string>(eventSource + "WatchTime", "60"));
-                    }
+                string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
+                userRankCollection = new List<KeyValuePair<string, string>>();
+                userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
+                string keyToUpdate = eventSource + "WatchTime";
+                int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToUpdate);
+                if (index == -1)
+                {
+                    userRankCollection.Add(new KeyValuePair<string, string>(eventSource + "WatchTime", "60"));
+                }
 
-                    if (index != -1)
-                    {
-                        userRankCollection[index] = new KeyValuePair<string, string>(keyToUpdate, newValue);
-                    }
+                if (index != -1)
+                {
+                    string newValue = (int.Parse(userRankCollection[index].Value) + 60).ToString();
+                    userRankCollection[index] = new KeyValuePair<string, string>(keyToUpdate, newValue);
+                }
 
-                    CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
+                CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
             }
         }
 
-    return true;
+        return true;
+    }
+
+    public bool AddMessageCount()
+    {
+        var userRankCollection = new List<KeyValuePair<string, string>>();
+        string eventSource = args["eventSource"].ToString();
+        string userName = args["userName"].ToString().ToLower();
+        if (CPH.TryGetArg("viewersBlackList", out string tempViewersBlackList))
+        {
+            List<string> viewersBlackList = new List<string>(tempViewersBlackList.ToLower().Split(';'));
+            if (viewersBlackList.Contains(userName))
+                return false;
+        }
+
+        string viewerVariableName = userName + "RankSystem";
+        if (CPH.GetGlobalVar<string>(viewerVariableName, true) == null)
+        {
+            InitializeUserGlobalVar(viewerVariableName, eventSource);
+        }
+
+        string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
+        userRankCollection = new List<KeyValuePair<string, string>>();
+        userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
+        string keyToUpdate = eventSource + "MessageCount";
+        int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToUpdate);
+        if (index == -1)
+        {
+            userRankCollection.Add(new KeyValuePair<string, string>(eventSource + "MessageCount", "1"));
+        }
+
+        if (index != -1)
+        {
+            string newValue = (int.Parse(userRankCollection[index].Value) + 1).ToString();
+            userRankCollection[index] = new KeyValuePair<string, string>(keyToUpdate, newValue);
+        }
+
+        CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
+        return true;
     }
 
     public bool GetWatchTime()
     {
         if (!CPH.TryGetArg("commandSource", out string commandSource))
             return false;
-
         if (!CPH.TryGetArg("userName", out string userName))
             return false;
-
         string viewerVariableName = userName + "RankSystem";
         var userRankCollection = new List<KeyValuePair<string, string>>();
-
         if (CPH.GetGlobalVar<string>(viewerVariableName, true) != null)
-        {string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
-        userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
-        string keyToShow = commandSource + "WatchTime";
-        int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToShow);
-        if (index != -1)
         {
-            CPH.SetArgument("userWatchTime", userRankCollection[index].Value);
-        } else {
-            CPH.SetArgument("userWatchTime", "Пользователь не найден!");
+            string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
+            userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
+            string keyToShow = commandSource + "WatchTime";
+            int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToShow);
+            if (index != -1)
+            {
+                CPH.SetArgument("userWatchTime", userRankCollection[index].Value);
+            }
+            else
+            {
+                CPH.SetArgument("userWatchTime", "Пользователь не найден!");
+            }
         }
-        } else {
+        else
+        {
             CPH.SetArgument("userWatchTime", "Пользователь не найден!");
         }
 
