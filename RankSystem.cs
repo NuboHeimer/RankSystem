@@ -28,40 +28,43 @@ public class CPHInline
     {
         string eventSource = "Test";
         var userRankCollection = new List<KeyValuePair<string, string>>();
-        if (args["eventSource"].ToString().Equals("misc"))
+
+        if (args["eventSource"].ToString().Equals("misc")) // если в eventSource лежит misc -- значит это не дефолтный PresentVieewr.
         {
-            if (args.ContainsKey("timerId"))
+            if (args.ContainsKey("timerId")) // если это кастомный таймер -- надо понять, какой именно.
             {
-                // Возможно, стоит переделать на имя таймера.
+                // Возможно, стоит переделать на id || name.
                 if (args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79"))
                     eventSource = "VKVideoLive";
             }
         }
         else
-            eventSource = args["eventSource"].ToString();
-        if (args.ContainsKey("users"))
+            eventSource = args["eventSource"].ToString(); // иначе просто берём источник события (twitch/youtube/trovo).
+
+        if (args.ContainsKey("users")) // защита от дурака с пустым аргументом списка пользователей.
         {
             var currentViewers = (List<Dictionary<string, object>>)args["users"];
 
             if (currentViewers.Count == 0)
-                return true; // выходим, если в списке нет зрителей.
+                return true; // выходим, если список зрителей всё же пустой.
 
-            if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
-                coinsToAdd = 0;
+            if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd)) // записываем значение валюты за минуты просмотра, если она задана в настройках экшена
+                coinsToAdd = 0; // или ставим её в ноль.
 
-            foreach (var viewer in currentViewers)
+            foreach (var viewer in currentViewers) // проходимся по зрителям в списке.
             {
                 string viewerName = viewer["userName"].ToString().ToLower();
-                if (CPH.TryGetArg("viewersBlackList", out string tempViewersBlackList))
+
+                if (CPH.TryGetArg("viewersBlackList", out string tempViewersBlackList)) // проверяем чёрный список зрителей.
                 {
                     List<string> viewersBlackList = new List<string>(tempViewersBlackList.ToLower().Split(';'));
                     if (viewersBlackList.Contains(viewerName))
-                        continue; // пропускаем итерацию если существует чёрный список зрителей и текущий в нём есть
+                        continue; // пропускаем итерацию если существует чёрный список зрителей и текущий в нём есть.
                 }
 
                 string viewerVariableName = viewerName + "RankSystem";
 
-                if (CPH.GetGlobalVar<string>(viewerVariableName, true) == null)
+                if (CPH.GetGlobalVar<string>(viewerVariableName, true) == null) // если для текущего зрителя ещё нет глобальной переменной -- инициализируем её.
                     InitializeUserGlobalVar(viewerVariableName, eventSource);
 
                 string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
@@ -71,16 +74,21 @@ public class CPHInline
                 int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToUpdate);
                 
                 if (index == -1)
-                    userRankCollection.Add(new KeyValuePair<string, string>(keyToUpdate, "60"));
-
-                if (index != -1)
+                    /*  TODO переделать на константу или аргумент.
+                        Добавь еще триггер старта сб
+                        Прожми тест триггер на него, в аргументах найдешь признак того, что запустилось по старту сб
+                        Добавляешь код, в нем проверку на триггер. Если старт сб - запомни время
+                        Иначе - возьми дельту (с) Play_Code.
+                    */
+                    userRankCollection.Add(new KeyValuePair<string, string>(keyToUpdate, "60")); // если у пользователя ещё нет времени просмотра задаём начальную минуту.
+                else
                 {
-                    string newValue = (int.Parse(userRankCollection[index].Value) + 60).ToString();
+                    string newValue = (int.Parse(userRankCollection[index].Value) + 60).ToString(); // добавляем минуту к времени просмотра
                     userRankCollection[index] = new KeyValuePair<string, string>(keyToUpdate, newValue);
                 }
 
                 CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
-                if (coinsToAdd > 0)
+                if (coinsToAdd > 0) // если указано количество валюты для добавления за время просмотра
                     AddCoins(coinsToAdd, eventSource, viewerName);
             }
         }
