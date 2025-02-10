@@ -209,14 +209,63 @@ public class CPHInline
             userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
             string keyToShow = commandSource + "WatchTime";
             int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToShow);
-            if (index != -1)
-                CPH.SetArgument("userWatchTime", userRankCollection[index].Value);
+            if (index != -1) {
+                long userWatchTime = long.Parse(userRankCollection[index].Value);
+                // TODO REFACTOR
+                // Определяем количество секунд в различных временных единицах
+                const long secondsInMinute = 60;
+                const long secondsInHour = 3600; // 60 * 60
+                const long secondsInDay = 86400; // 24 * 60 * 60
+                const long secondsInMonth = 2592000; // 30 * 24 * 60 * 60 (приблизительно)
+                const long secondsInYear = 31536000; // 365 * 24 * 60 * 60 (приблизительно)
+
+                // Вычисляем количество лет, месяцев, дней, часов, минут и секунд
+                long years = userWatchTime / secondsInYear;
+                userWatchTime %= secondsInYear;
+
+                long months = userWatchTime / secondsInMonth;
+                userWatchTime %= secondsInMonth;
+
+                long days = userWatchTime / secondsInDay;
+                userWatchTime %= secondsInDay;
+
+                long hours = userWatchTime / secondsInHour;
+                userWatchTime %= secondsInHour;
+
+                long minutes = userWatchTime / secondsInMinute;
+                long seconds = userWatchTime % secondsInMinute;
+
+                // Формируем список частей времени
+                var parts = new System.Collections.Generic.List<string>();
+
+                if (years > 0)
+                    parts.Add($"{years} лет{(years > 1 ? "" : "")}");
+
+                if (months > 0)
+                    parts.Add($"{months} месяцев{(months > 1 ? "" : "")}");
+
+                if (days > 0)
+                    parts.Add($"{days} дней{(days > 1 ? "" : "")}");
+
+                if (hours > 0)
+                    parts.Add($"{hours} часов{(hours > 1 ? "" : "")}");
+
+                if (minutes > 0 || seconds > 0) // Добавляем минуты, если есть секунды
+                    parts.Add($"{minutes} минут{(minutes > 1 ? "" : "")}");
+
+                if (seconds > 0 || parts.Count == 0) // Добавляем секунды, если нет других частей
+                    parts.Add($"{seconds} секунд{(seconds > 1 ? "" : "")}");
+
+
+                // Объединяем части в строку
+                CPH.LogInfo("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA " + string.Join(" ", parts));
+                CPH.SetArgument("userWatchTime", string.Join(" ", parts));
+            }
             else
                 CPH.SetArgument("userWatchTime", "Пользователь не найден!");
         }
         else
             CPH.SetArgument("userWatchTime", "Пользователь не найден!");
-
         return true;
     }
 }
