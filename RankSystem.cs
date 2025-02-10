@@ -4,7 +4,7 @@
 ///   Email:        nuboheimer@yandex.ru
 ///----------------------------------------------------------------------------
  
-///   Version:      0.0.1
+///   Version:      0.0.2
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
@@ -211,6 +211,7 @@ public class CPHInline
             return false;
 
         string viewerVariableName = userName.ToLower() + "RankSystem";
+        string message = "Зритель не найден в базе!";
         var userRankCollection = new List<KeyValuePair<string, string>>();
         
         if (CPH.GetGlobalVar<string>(viewerVariableName, true) != null)
@@ -268,13 +269,11 @@ public class CPHInline
 
 
                 // Объединяем части в строку
-                CPH.SetArgument("userWatchTime", string.Join(" ", parts));
+
+                message = string.Join(" ", parts);
             }
-            else
-                CPH.SetArgument("userWatchTime", "Пользователь не найден!");
         }
-        else
-            CPH.SetArgument("userWatchTime", "Пользователь не найден!");
+        SendReply(message, commandSource.ToLower());
         return true;
     }
 
@@ -287,6 +286,7 @@ public class CPHInline
             return false;
 
         string viewerVariableName = userName.ToLower() + "RankSystem";
+        string message = "Зритель не найден в базе!";
         var userRankCollection = new List<KeyValuePair<string, string>>();
         
         if (CPH.GetGlobalVar<string>(viewerVariableName, true) != null)
@@ -296,13 +296,28 @@ public class CPHInline
             string keyToShow = "Coins";
             int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToShow);
             if (index != -1) {
-                CPH.SetArgument("userCoins", userRankCollection[index].Value.ToString());                
+                message = userRankCollection[index].Value.ToString();         
             }
-            else
-                CPH.SetArgument("userCoins", "Пользователь не найден!");
         }
-        else
-            CPH.SetArgument("userCoins", "Пользователь не найден!");
+        SendReply(message, commandSource.ToLower());
+        return true;
+    }
+
+    private bool SendReply(string message, string target){
+
+        if (target.Equals("twitch"))
+            CPH.SendMessage(message);
+
+        else if (target.Equals("youtube"))
+            CPH.SendMessage(message);
+
+        else if (target.Equals("trovo"))
+            CPH.SendMessage(message);
+        
+        else {
+            CPH.SetArgument("message", message);
+            CPH.ExecuteMethod("MiniChat Method Collection", "SendMessageReply");
+        } 
         return true;
     }
 }
