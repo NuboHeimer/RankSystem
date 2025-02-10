@@ -11,6 +11,7 @@ using Newtonsoft.Json;
 
 public class CPHInline
 {
+    private const int DEFAULT_TIME_TO_ADD = 60; // по умолчанию мы добавляем 60 секунд к времени просмотра.
     private bool InitializeUserGlobalVar(string viewerVariableName, string eventSource)
     {
         var userRankCollection = new List<KeyValuePair<string, string>>();
@@ -51,6 +52,9 @@ public class CPHInline
             if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd)) // записываем значение валюты за минуты просмотра, если она задана в настройках экшена
                 coinsToAdd = 0; // или ставим её в ноль.
 
+            if (!CPH.TryGetArg("timeToAdd", out int timeToAdd)) // записываем, сколько добавлять времени, если это задано в настройках экшене
+                timeToAdd = DEFAULT_TIME_TO_ADD; // или записываем дефолтное значение
+
             foreach (var viewer in currentViewers) // проходимся по зрителям в списке.
             {
                 string viewerName = viewer["userName"].ToString().ToLower();
@@ -74,16 +78,15 @@ public class CPHInline
                 int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToUpdate);
                 
                 if (index == -1)
-                    /*  TODO переделать на константу или аргумент.
-                        Добавь еще триггер старта сб
+                    /*  TODO Добавь еще триггер старта сб
                         Прожми тест триггер на него, в аргументах найдешь признак того, что запустилось по старту сб
                         Добавляешь код, в нем проверку на триггер. Если старт сб - запомни время
                         Иначе - возьми дельту (с) Play_Code.
                     */
-                    userRankCollection.Add(new KeyValuePair<string, string>(keyToUpdate, "60")); // если у пользователя ещё нет времени просмотра задаём начальную минуту.
+                    userRankCollection.Add(new KeyValuePair<string, string>(keyToUpdate, timeToAdd.ToString())); // если у пользователя ещё нет времени просмотра задаём начальное значение.
                 else
                 {
-                    string newValue = (int.Parse(userRankCollection[index].Value) + 60).ToString(); // добавляем минуту к времени просмотра
+                    string newValue = (int.Parse(userRankCollection[index].Value) + timeToAdd).ToString(); // добавляем время просмотра
                     userRankCollection[index] = new KeyValuePair<string, string>(keyToUpdate, newValue);
                 }
 
