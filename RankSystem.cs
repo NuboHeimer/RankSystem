@@ -111,6 +111,9 @@ public class CPHInline
                 return false;
         }
 
+        if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd)) // записываем значение валюты за сообщение, если она задана в настройках экшена
+            coinsToAdd = 0; // или ставим её в ноль.
+
         string viewerVariableName = userName + "RankSystem";
         
         if (CPH.GetGlobalVar<string>(viewerVariableName, true) == null)
@@ -129,9 +132,12 @@ public class CPHInline
         {
             string newValue = (int.Parse(userRankCollection[index].Value) + 1).ToString();
             userRankCollection[index] = new KeyValuePair<string, string>(keyToUpdate, newValue);
+            
         }
 
         CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
+        if (coinsToAdd > 0) // если указано количество валюты для добавления за сообщение
+            AddCoins(coinsToAdd, eventSource, userName);
 
         return true;
     }
@@ -142,6 +148,9 @@ public class CPHInline
         string eventSource = args["eventSource"].ToString();
         string userName = args["userName"].ToString().ToLower();
         string viewerVariableName = userName + "RankSystem";
+
+        if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd)) // записываем значение валюты за фоллов, если она задана в настройках экшена
+            coinsToAdd = 0; // или ставим её в ноль.
         
         if (CPH.GetGlobalVar<string>(viewerVariableName, true) == null)
             InitializeUserGlobalVar(viewerVariableName, eventSource);
@@ -162,6 +171,8 @@ public class CPHInline
         }
 
         CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
+        if (coinsToAdd > 0) // если указано количество валюты для добавления за фоллов
+            AddCoins(coinsToAdd, eventSource, userName);
         return true;
     }
 
