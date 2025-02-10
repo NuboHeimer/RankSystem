@@ -211,7 +211,7 @@ public class CPHInline
         if (!CPH.TryGetArg("userName", out string userName))
             return false;
 
-        string viewerVariableName = userName + "RankSystem";
+        string viewerVariableName = userName.ToLower() + "RankSystem";
         var userRankCollection = new List<KeyValuePair<string, string>>();
         
         if (CPH.GetGlobalVar<string>(viewerVariableName, true) != null)
@@ -276,6 +276,34 @@ public class CPHInline
         }
         else
             CPH.SetArgument("userWatchTime", "Пользователь не найден!");
+        return true;
+    }
+
+    public bool GetCoins()
+    {
+        if (!CPH.TryGetArg("commandSource", out string commandSource))
+            return false;
+
+        if (!CPH.TryGetArg("userName", out string userName))
+            return false;
+
+        string viewerVariableName = userName.ToLower() + "RankSystem";
+        var userRankCollection = new List<KeyValuePair<string, string>>();
+        
+        if (CPH.GetGlobalVar<string>(viewerVariableName, true) != null)
+        {
+            string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
+            userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
+            string keyToShow = "Coins";
+            int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToShow);
+            if (index != -1) {
+                CPH.SetArgument("userCoins", userRankCollection[index].Value.ToString());                
+            }
+            else
+                CPH.SetArgument("userCoins", "Пользователь не найден!");
+        }
+        else
+            CPH.SetArgument("userCoins", "Пользователь не найден!");
         return true;
     }
 }
