@@ -34,8 +34,7 @@ public class CPHInline
         {
             if (args.ContainsKey("timerId")) // если это кастомный таймер -- надо понять, какой именно.
             {
-                // Возможно, стоит переделать на id || name.
-                if (args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79"))
+                if (args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || args["timerName"].ToString().Equals("VKVideoLive"))
                     eventSource = "VKVideoLive";
             }
         }
