@@ -258,7 +258,6 @@ public class CPHInline
 
 
                 // Объединяем части в строку
-                CPH.LogInfo("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA " + string.Join(" ", parts));
                 CPH.SetArgument("userWatchTime", string.Join(" ", parts));
             }
             else
