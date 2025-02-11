@@ -39,7 +39,7 @@ public class CPHInline
             }
         }
         else
-            eventSource = args["eventSource"].ToString(); // иначе просто берём источник события (twitch/youtube/trovo).
+            eventSource = args["eventSource"].ToString(); // иначе просто берём источник события.
 
         if (args.ContainsKey("users")) // защита от дурака с пустым аргументом списка пользователей.
         {
@@ -56,16 +56,17 @@ public class CPHInline
 
             foreach (var viewer in currentViewers) // проходимся по зрителям в списке.
             {
-                string viewerName = viewer["userName"].ToString().ToLower();
-
+                string userName = viewer["userName"].ToString().ToLower();
+                
+                //TODO переделать на глобальную переменную.
                 if (CPH.TryGetArg("viewersBlackList", out string tempViewersBlackList)) // проверяем чёрный список зрителей.
                 {
                     List<string> viewersBlackList = new List<string>(tempViewersBlackList.ToLower().Split(';'));
-                    if (viewersBlackList.Contains(viewerName))
+                    if (viewersBlackList.Contains(userName))
                         continue; // пропускаем итерацию если существует чёрный список зрителей и текущий в нём есть.
                 }
 
-                string viewerVariableName = viewerName + "RankSystem";
+                string viewerVariableName = userName + "RankSystem";
 
                 if (CPH.GetGlobalVar<string>(viewerVariableName, true) == null) // если для текущего зрителя ещё нет глобальной переменной -- инициализируем её.
                     InitializeUserGlobalVar(viewerVariableName, eventSource);
@@ -91,7 +92,7 @@ public class CPHInline
 
                 CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
                 if (coinsToAdd > 0) // если указано количество валюты для добавления за время просмотра
-                    AddCoins(coinsToAdd, eventSource, viewerName);
+                    AddCoins(coinsToAdd, eventSource, userName);
             }
         }
 
