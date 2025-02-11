@@ -208,8 +208,8 @@ public class CPHInline
         if (!CPH.TryGetArg("commandSource", out string commandSource))
             return false;
 
-        if (eventSource.ToLower().Equals("vkplay"))
-            eventSource = "vkvideolive";
+        if (commandSource.ToLower().Equals("vkplay"))
+            commandSource = "vkvideolive";
 
         if (!CPH.TryGetArg("userName", out string userName))
             return false;
@@ -286,8 +286,8 @@ public class CPHInline
         if (!CPH.TryGetArg("commandSource", out string commandSource))
             return false;
         
-        if (eventSource.ToLower().Equals("vkplay"))
-            eventSource = "vkvideolive";
+        if (commandSource.ToLower().Equals("vkplay"))
+            commandSource = "vkvideolive";
 
         if (!CPH.TryGetArg("userName", out string userName))
             return false;
