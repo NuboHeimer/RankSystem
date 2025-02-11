@@ -314,6 +314,35 @@ public class CPHInline
         return true;
     }
 
+    public bool GetGameWhenFollow()
+    {
+        if (!CPH.TryGetArg("commandSource", out string commandSource))
+            return false;
+        
+        if (commandSource.ToLower().Equals("vkplay"))
+            commandSource = "vkvideolive";
+
+        if (!CPH.TryGetArg("userName", out string userName))
+            return false;
+
+        string viewerVariableName = userName.ToLower() + "RankSystem";
+        string message = "Запрошенная информация не найдена!";
+        var userRankCollection = new List<KeyValuePair<string, string>>();
+        
+        if (CPH.GetGlobalVar<string>(viewerVariableName, true) != null)
+        {
+            string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
+            userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
+            string keyToShow = commandSource.ToLower() + "GameWhenFollow";
+            int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToShow);
+            if (index != -1) {
+                message = userRankCollection[index].Value.ToString();         
+            }
+        }
+        SendReply(message, commandSource.ToLower());
+        return true;
+    }
+
     private void AddGameWhenFollow(string gameToAdd, string eventSource, string targetUser){
         
         var userRankCollection = new List<KeyValuePair<string, string>>();
