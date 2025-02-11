@@ -30,16 +30,16 @@ public class CPHInline
         string eventSource = "Test";
         var userRankCollection = new List<KeyValuePair<string, string>>();
 
-        if (args["eventSource"].ToString().Equals("misc")) // если в eventSource лежит misc -- значит это не дефолтный PresentVieewr.
+        if (args["eventSource"].ToString().ToLower().Equals("misc")) // если в eventSource лежит misc -- значит это не дефолтный PresentVieewr.
         {
             if (args.ContainsKey("timerId")) // если это кастомный таймер -- надо понять, какой именно.
             {
-                if (args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || args["timerName"].ToString().Equals("VKVideoLive"))
-                    eventSource = "VKVideoLive";
+                if (args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || args["timerName"].ToString().ToLower().Equals("vkvideolive"))
+                    eventSource = "vkvideolive";
             }
         }
         else
-            eventSource = args["eventSource"].ToString(); // иначе просто берём источник события.
+            eventSource = args["eventSource"].ToString().ToLower(); // иначе просто берём источник события.
 
         if (args.ContainsKey("users")) // защита от дурака с пустым аргументом списка пользователей.
         {
@@ -58,7 +58,6 @@ public class CPHInline
             {
                 string userName = viewer["userName"].ToString().ToLower();
                 
-                //TODO переделать на глобальную переменную.
                 if (CPH.TryGetArg("viewersBlackList", out string tempViewersBlackList)) // проверяем чёрный список зрителей.
                 {
                     List<string> viewersBlackList = new List<string>(tempViewersBlackList.ToLower().Split(';'));
@@ -78,11 +77,6 @@ public class CPHInline
                 int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToUpdate);
                 
                 if (index == -1)
-                    /*  TODO Добавь еще триггер старта сб
-                        Прожми тест триггер на него, в аргументах найдешь признак того, что запустилось по старту сб
-                        Добавляешь код, в нем проверку на триггер. Если старт сб - запомни время
-                        Иначе - возьми дельту (с) Play_Code.
-                    */
                     userRankCollection.Add(new KeyValuePair<string, string>(keyToUpdate, timeToAdd.ToString())); // если у пользователя ещё нет времени просмотра задаём начальное значение.
                 else
                 {
@@ -102,7 +96,11 @@ public class CPHInline
     public bool AddMessageCount()
     {
         var userRankCollection = new List<KeyValuePair<string, string>>();
-        string eventSource = args["eventSource"].ToString();
+        string eventSource = args["eventSource"].ToString().ToLower();
+        
+        if (eventSource.Equals("vkplay"))
+            eventSource = "vkvideolive";
+        
         string userName = args["userName"].ToString().ToLower();
         if (CPH.TryGetArg("viewersBlackList", out string tempViewersBlackList))
         {
@@ -145,7 +143,9 @@ public class CPHInline
     public bool AddFollowDate()
     {
         var userRankCollection = new List<KeyValuePair<string, string>>();
-        string eventSource = args["eventSource"].ToString();
+        string eventSource = args["eventSource"].ToString().ToLower();
+        if (eventSource.Equals("vkplay"))
+            eventSource = "vkvideolive";
         string userName = args["userName"].ToString().ToLower();
         string viewerVariableName = userName + "RankSystem";
 
@@ -208,6 +208,9 @@ public class CPHInline
         if (!CPH.TryGetArg("commandSource", out string commandSource))
             return false;
 
+        if (eventSource.ToLower().Equals("vkplay"))
+            eventSource = "vkvideolive";
+
         if (!CPH.TryGetArg("userName", out string userName))
             return false;
 
@@ -219,7 +222,7 @@ public class CPHInline
         {
             string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
             userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
-            string keyToShow = commandSource + "WatchTime";
+            string keyToShow = commandSource.ToLower() + "WatchTime";
             int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToShow);
             if (index != -1) {
                 long userWatchTime = long.Parse(userRankCollection[index].Value);
@@ -282,6 +285,9 @@ public class CPHInline
     {
         if (!CPH.TryGetArg("commandSource", out string commandSource))
             return false;
+        
+        if (eventSource.ToLower().Equals("vkplay"))
+            eventSource = "vkvideolive";
 
         if (!CPH.TryGetArg("userName", out string userName))
             return false;
