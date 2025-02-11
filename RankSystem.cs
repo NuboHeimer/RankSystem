@@ -4,7 +4,7 @@
 ///   Email:        nuboheimer@yandex.ru
 ///----------------------------------------------------------------------------
  
-///   Version:      0.0.2
+///   Version:      0.1.0
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
@@ -173,6 +173,10 @@ public class CPHInline
         CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
         if (coinsToAdd > 0) // если указано количество валюты для добавления за фоллов
             AddCoins(coinsToAdd, eventSource, userName);
+
+        if (CPH.TryGetArg("game", out string game)){ // записываем категорию стрима, если она есть аргументах.
+            AddGameWhenFollow(game, eventSource, userName);
+        } 
         return true;
     }
 
@@ -215,7 +219,7 @@ public class CPHInline
             return false;
 
         string viewerVariableName = userName.ToLower() + "RankSystem";
-        string message = "Зритель не найден в базе!";
+        string message = "Запрошенная информация не найдена!";
         var userRankCollection = new List<KeyValuePair<string, string>>();
         
         if (CPH.GetGlobalVar<string>(viewerVariableName, true) != null)
@@ -226,7 +230,7 @@ public class CPHInline
             int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToShow);
             if (index != -1) {
                 long userWatchTime = long.Parse(userRankCollection[index].Value);
-                // TODO REFACTOR
+
                 // Определяем количество секунд в различных временных единицах
                 const long secondsInMinute = 60;
                 const long secondsInHour = 3600; // 60 * 60
@@ -293,7 +297,7 @@ public class CPHInline
             return false;
 
         string viewerVariableName = userName.ToLower() + "RankSystem";
-        string message = "Зритель не найден в базе!";
+        string message = "Запрошенная информация не найдена!";
         var userRankCollection = new List<KeyValuePair<string, string>>();
         
         if (CPH.GetGlobalVar<string>(viewerVariableName, true) != null)
@@ -308,6 +312,31 @@ public class CPHInline
         }
         SendReply(message, commandSource.ToLower());
         return true;
+    }
+
+    private void AddGameWhenFollow(string gameToAdd, string eventSource, string targetUser){
+        
+        var userRankCollection = new List<KeyValuePair<string, string>>();
+        string viewerVariableName = targetUser + "RankSystem";
+        
+        if (CPH.GetGlobalVar<string>(viewerVariableName, true) == null)
+            InitializeUserGlobalVar(viewerVariableName, eventSource);
+
+        string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
+        userRankCollection = new List<KeyValuePair<string, string>>();
+        userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
+        string keyToUpdate = eventSource + "GameWhenFollow";
+        int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToUpdate);
+        
+        if (index == -1)
+            userRankCollection.Add(new KeyValuePair<string, string>(keyToUpdate, gameToAdd.ToString()));
+
+        if (index != -1)
+        {
+            userRankCollection[index] = new KeyValuePair<string, string>(keyToUpdate, gameToAdd);
+        }
+
+        CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
     }
 
     private bool SendReply(string message, string target){
