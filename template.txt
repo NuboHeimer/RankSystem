@@ -16,6 +16,10 @@ NuboHeimer:
         "Value":"456456456"
     },
     {
+        "Key":"SeviceNameGameWhenFollow",
+        "Value":"456456456"
+    },
+    {
         "Key":"Coins",
         "Value":"456456456"
     },
