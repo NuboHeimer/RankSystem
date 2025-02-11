@@ -4,7 +4,7 @@
 ///   Email:        nuboheimer@yandex.ru
 ///----------------------------------------------------------------------------
  
-///   Version:      0.0.1
+///   Version:      0.0.2
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
@@ -30,16 +30,16 @@ public class CPHInline
         string eventSource = "Test";
         var userRankCollection = new List<KeyValuePair<string, string>>();
 
-        if (args["eventSource"].ToString().Equals("misc")) // если в eventSource лежит misc -- значит это не дефолтный PresentVieewr.
+        if (args["eventSource"].ToString().ToLower().Equals("misc")) // если в eventSource лежит misc -- значит это не дефолтный PresentVieewr.
         {
             if (args.ContainsKey("timerId")) // если это кастомный таймер -- надо понять, какой именно.
             {
-                if (args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || args["timerName"].ToString().Equals("VKVideoLive"))
-                    eventSource = "VKVideoLive";
+                if (args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || args["timerName"].ToString().ToLower().Equals("vkvideolive"))
+                    eventSource = "vkvideolive";
             }
         }
         else
-            eventSource = args["eventSource"].ToString(); // иначе просто берём источник события (twitch/youtube/trovo).
+            eventSource = args["eventSource"].ToString().ToLower(); // иначе просто берём источник события.
 
         if (args.ContainsKey("users")) // защита от дурака с пустым аргументом списка пользователей.
         {
@@ -56,16 +56,16 @@ public class CPHInline
 
             foreach (var viewer in currentViewers) // проходимся по зрителям в списке.
             {
-                string viewerName = viewer["userName"].ToString().ToLower();
-
+                string userName = viewer["userName"].ToString().ToLower();
+                
                 if (CPH.TryGetArg("viewersBlackList", out string tempViewersBlackList)) // проверяем чёрный список зрителей.
                 {
                     List<string> viewersBlackList = new List<string>(tempViewersBlackList.ToLower().Split(';'));
-                    if (viewersBlackList.Contains(viewerName))
+                    if (viewersBlackList.Contains(userName))
                         continue; // пропускаем итерацию если существует чёрный список зрителей и текущий в нём есть.
                 }
 
-                string viewerVariableName = viewerName + "RankSystem";
+                string viewerVariableName = userName + "RankSystem";
 
                 if (CPH.GetGlobalVar<string>(viewerVariableName, true) == null) // если для текущего зрителя ещё нет глобальной переменной -- инициализируем её.
                     InitializeUserGlobalVar(viewerVariableName, eventSource);
@@ -77,11 +77,6 @@ public class CPHInline
                 int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToUpdate);
                 
                 if (index == -1)
-                    /*  TODO Добавь еще триггер старта сб
-                        Прожми тест триггер на него, в аргументах найдешь признак того, что запустилось по старту сб
-                        Добавляешь код, в нем проверку на триггер. Если старт сб - запомни время
-                        Иначе - возьми дельту (с) Play_Code.
-                    */
                     userRankCollection.Add(new KeyValuePair<string, string>(keyToUpdate, timeToAdd.ToString())); // если у пользователя ещё нет времени просмотра задаём начальное значение.
                 else
                 {
@@ -91,7 +86,7 @@ public class CPHInline
 
                 CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
                 if (coinsToAdd > 0) // если указано количество валюты для добавления за время просмотра
-                    AddCoins(coinsToAdd, eventSource, viewerName);
+                    AddCoins(coinsToAdd, eventSource, userName);
             }
         }
 
@@ -101,7 +96,11 @@ public class CPHInline
     public bool AddMessageCount()
     {
         var userRankCollection = new List<KeyValuePair<string, string>>();
-        string eventSource = args["eventSource"].ToString();
+        string eventSource = args["eventSource"].ToString().ToLower();
+        
+        if (eventSource.Equals("vkplay"))
+            eventSource = "vkvideolive";
+        
         string userName = args["userName"].ToString().ToLower();
         if (CPH.TryGetArg("viewersBlackList", out string tempViewersBlackList))
         {
@@ -144,7 +143,9 @@ public class CPHInline
     public bool AddFollowDate()
     {
         var userRankCollection = new List<KeyValuePair<string, string>>();
-        string eventSource = args["eventSource"].ToString();
+        string eventSource = args["eventSource"].ToString().ToLower();
+        if (eventSource.Equals("vkplay"))
+            eventSource = "vkvideolive";
         string userName = args["userName"].ToString().ToLower();
         string viewerVariableName = userName + "RankSystem";
 
@@ -207,17 +208,21 @@ public class CPHInline
         if (!CPH.TryGetArg("commandSource", out string commandSource))
             return false;
 
+        if (commandSource.ToLower().Equals("vkplay"))
+            commandSource = "vkvideolive";
+
         if (!CPH.TryGetArg("userName", out string userName))
             return false;
 
         string viewerVariableName = userName.ToLower() + "RankSystem";
+        string message = "Зритель не найден в базе!";
         var userRankCollection = new List<KeyValuePair<string, string>>();
         
         if (CPH.GetGlobalVar<string>(viewerVariableName, true) != null)
         {
             string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
             userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
-            string keyToShow = commandSource + "WatchTime";
+            string keyToShow = commandSource.ToLower() + "WatchTime";
             int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToShow);
             if (index != -1) {
                 long userWatchTime = long.Parse(userRankCollection[index].Value);
@@ -268,13 +273,11 @@ public class CPHInline
 
 
                 // Объединяем части в строку
-                CPH.SetArgument("userWatchTime", string.Join(" ", parts));
+
+                message = string.Join(" ", parts);
             }
-            else
-                CPH.SetArgument("userWatchTime", "Пользователь не найден!");
         }
-        else
-            CPH.SetArgument("userWatchTime", "Пользователь не найден!");
+        SendReply(message, commandSource.ToLower());
         return true;
     }
 
@@ -282,11 +285,15 @@ public class CPHInline
     {
         if (!CPH.TryGetArg("commandSource", out string commandSource))
             return false;
+        
+        if (commandSource.ToLower().Equals("vkplay"))
+            commandSource = "vkvideolive";
 
         if (!CPH.TryGetArg("userName", out string userName))
             return false;
 
         string viewerVariableName = userName.ToLower() + "RankSystem";
+        string message = "Зритель не найден в базе!";
         var userRankCollection = new List<KeyValuePair<string, string>>();
         
         if (CPH.GetGlobalVar<string>(viewerVariableName, true) != null)
@@ -296,13 +303,28 @@ public class CPHInline
             string keyToShow = "Coins";
             int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToShow);
             if (index != -1) {
-                CPH.SetArgument("userCoins", userRankCollection[index].Value.ToString());                
+                message = userRankCollection[index].Value.ToString();         
             }
-            else
-                CPH.SetArgument("userCoins", "Пользователь не найден!");
         }
-        else
-            CPH.SetArgument("userCoins", "Пользователь не найден!");
+        SendReply(message, commandSource.ToLower());
+        return true;
+    }
+
+    private bool SendReply(string message, string target){
+
+        if (target.Equals("twitch"))
+            CPH.SendMessage(message);
+
+        else if (target.Equals("youtube"))
+            CPH.SendMessage(message);
+
+        else if (target.Equals("trovo"))
+            CPH.SendMessage(message);
+        
+        else {
+            CPH.SetArgument("message", message);
+            CPH.ExecuteMethod("MiniChat Method Collection", "SendMessageReply");
+        } 
         return true;
     }
 }
