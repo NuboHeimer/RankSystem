@@ -1,22 +1,22 @@
 global_var userNameRankSystem
 value: json obj, key: value
 
-NuboHeimer:
+userNameuserIdeseviceNameRankSystem:
 [
     {
-        "Key":"SeviceNameWatchTime",
+        "Key":"WatchTime",
         "Value":"35456453248"
     },
     {
-        "Key":"SeviceNameMessageCount",
+        "Key":"MessageCount",
         "Value":"456456456"
     },
     {
-        "Key":"SeviceNameFollowDate",
+        "Key":"FollowDate",
         "Value":"456456456"
     },
     {
-        "Key":"SeviceNameGameWhenFollow",
+        "Key":"GameWhenFollow",
         "Value":"456456456"
     },
     {
@@ -24,12 +24,7 @@ NuboHeimer:
         "Value":"456456456"
     },
     {
-        "Key":"SeviceNameRank",
+        "Key":"Rank",
         "Value":"456456456"
     }
 ]
-
-userRankCollection.Add(new KeyValuePair<string, string>(eventSource + "WatchTime", "0"));
-userRankCollection.Add(new KeyValuePair<string, string>(eventSource + "MessageCount", "0"));
-userRankCollection.Add(new KeyValuePair<string, string>(eventSource + "FollowDate", null));
-userRankCollection.Add(new KeyValuePair<string, string>(eventSource + "Rank", null));
