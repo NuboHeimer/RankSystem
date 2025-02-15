@@ -57,7 +57,7 @@ public class CPHInline
             foreach (var viewer in currentViewers) // проходимся по зрителям в списке.
             {
                 string userName = viewer["userName"].ToString().ToLower();
-                string userId = viewer["id"].ToString().ToLower();
+                string userId = viewer["id"].ToString();
                 
                 if (CPH.TryGetArg("viewersBlackList", out string tempViewersBlackList)) // проверяем чёрный список зрителей.
                 {
@@ -241,7 +241,6 @@ public class CPHInline
 
         string viewerVariableName = userName.ToLower() + userId + commandSource.ToLower() + "RankSystem";
 
-        CPH.LogInfo("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + viewerVariableName);
         string message = "Запрошенная информация не найдена!";
         var userRankCollection = new List<KeyValuePair<string, string>>();
         
