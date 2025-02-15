@@ -4,7 +4,7 @@
 ///   Email:        nuboheimer@yandex.ru
 ///----------------------------------------------------------------------------
  
-///   Version:      0.2.0
+///   Version:      0.2.1
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
@@ -57,7 +57,7 @@ public class CPHInline
             foreach (var viewer in currentViewers) // проходимся по зрителям в списке.
             {
                 string userName = viewer["userName"].ToString().ToLower();
-                string userId = viewer["id"].ToString().ToLower();
+                string userId = viewer["id"].ToString();
                 
                 if (CPH.TryGetArg("viewersBlackList", out string tempViewersBlackList)) // проверяем чёрный список зрителей.
                 {
@@ -241,7 +241,6 @@ public class CPHInline
 
         string viewerVariableName = userName.ToLower() + userId + commandSource.ToLower() + "RankSystem";
 
-        CPH.LogInfo("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + viewerVariableName);
         string message = "Запрошенная информация не найдена!";
         var userRankCollection = new List<KeyValuePair<string, string>>();
         
@@ -407,10 +406,10 @@ public class CPHInline
             CPH.SendMessage(message);
 
         else if (target.Equals("youtube"))
-            CPH.SendMessage(message);
+            CPH.SendYouTubeMessage(message);
 
         else if (target.Equals("trovo"))
-            CPH.SendMessage(message);
+            CPH.SendTrovoMessage(message);
         
         else {
             CPH.SetArgument("message", message);
