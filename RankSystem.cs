@@ -407,10 +407,10 @@ public class CPHInline
             CPH.SendMessage(message);
 
         else if (target.Equals("youtube"))
-            CPH.SendMessage(message);
+            CPH.SendYouTubeMessage(message);
 
         else if (target.Equals("trovo"))
-            CPH.SendMessage(message);
+            CPH.SendTrovoMessage(message);
         
         else {
             CPH.SetArgument("message", message);
