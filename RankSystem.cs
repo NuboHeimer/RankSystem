@@ -4,7 +4,7 @@
 ///   Email:        nuboheimer@yandex.ru
 ///----------------------------------------------------------------------------
  
-///   Version:      0.2.1
+///   Version:      0.2.2
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
