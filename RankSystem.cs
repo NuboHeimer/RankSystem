@@ -259,9 +259,6 @@ public class CPHInline
         if (!CPH.TryGetArg("userId", out userId))
             CPH.TryGetArg("minichat.Data.UserID", out userId);
 
-        
-        
-
         string viewerVariableName = userName.ToLower() + userId + commandSource.ToLower() + "RankSystem";
 
         string message = "Запрошенная информация не найдена!";
@@ -275,55 +272,7 @@ public class CPHInline
             int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToShow);
             if (index != -1) {
                 long userWatchTime = long.Parse(userRankCollection[index].Value);
-
-                // Определяем количество секунд в различных временных единицах
-                const long secondsInMinute = 60;
-                const long secondsInHour = 3600; // 60 * 60
-                const long secondsInDay = 86400; // 24 * 60 * 60
-                const long secondsInMonth = 2592000; // 30 * 24 * 60 * 60 (приблизительно)
-                const long secondsInYear = 31536000; // 365 * 24 * 60 * 60 (приблизительно)
-
-                // Вычисляем количество лет, месяцев, дней, часов, минут и секунд
-                long years = userWatchTime / secondsInYear;
-                userWatchTime %= secondsInYear;
-
-                long months = userWatchTime / secondsInMonth;
-                userWatchTime %= secondsInMonth;
-
-                long days = userWatchTime / secondsInDay;
-                userWatchTime %= secondsInDay;
-
-                long hours = userWatchTime / secondsInHour;
-                userWatchTime %= secondsInHour;
-
-                long minutes = userWatchTime / secondsInMinute;
-                long seconds = userWatchTime % secondsInMinute;
-
-                // Формируем список частей времени
-                var parts = new System.Collections.Generic.List<string>();
-
-                if (years > 0)
-                    parts.Add($"{years} лет{(years > 1 ? "" : "")}");
-
-                if (months > 0)
-                    parts.Add($"{months} месяцев{(months > 1 ? "" : "")}");
-
-                if (days > 0)
-                    parts.Add($"{days} дней{(days > 1 ? "" : "")}");
-
-                if (hours > 0)
-                    parts.Add($"{hours} часов{(hours > 1 ? "" : "")}");
-
-                if (minutes > 0 || seconds > 0) // Добавляем минуты, если есть секунды
-                    parts.Add($"{minutes} минут{(minutes > 1 ? "" : "")}");
-
-                if (seconds > 0 || parts.Count == 0) // Добавляем секунды, если нет других частей
-                    parts.Add($"{seconds} секунд{(seconds > 1 ? "" : "")}");
-
-
-                // Объединяем части в строку
-
-                message = string.Join(" ", parts);
+                message = FormatDateTime(userWatchTime);
             }
         }
         SendReply(message, commandSource.ToLower());
@@ -439,5 +388,86 @@ public class CPHInline
             CPH.ExecuteMethod("MiniChat Method Collection", "SendMessageReply");
         } 
         return true;
+    }
+    public string FormatDateTime(long totalSeconds)
+    {
+        // Преобразуем общее количество секунд в годы, месяцы, дни, часы, минуты и секунды.
+        int years = 0;
+        int months = 0;
+        int days = (int)(totalSeconds / (60 * 60 * 24));
+        int hours = (int)((totalSeconds % (60 * 60 * 24)) / (60 * 60));
+        int minutes = (int)((totalSeconds % (60 * 60)) / 60);
+        int seconds = (int)(totalSeconds % 60);
+
+        if (days >= 365)
+        {
+            years = days / 365; // Примерно считаем годы
+            days %= 365; // Остаток дней после вычисления лет
+        }
+
+        if (days >= 30) // Примерно считаем месяцы
+        {
+            months = days / 30;
+            days %= 30; // Остаток дней после вычисления месяцев
+        }
+
+        string result = "";
+
+        if (years > 0)
+            result += $"{years.ToString()} {GetYearWord(years)} ";
+        if (months > 0)
+            result += $"{months.ToString()} {GetMonthWord(months)} ";
+        if (days > 0)
+            result += $"{days.ToString()} {GetDayWord(days)} ";
+        if (hours > 0)
+            result += $"{hours.ToString()} {GetHourWord(hours)} ";
+        if (minutes > 0)
+            result += $"{minutes.ToString()} {GetMinuteWord(minutes)} ";
+        if (seconds > 0)
+            result += $"{seconds.ToString()} {GetSecondWord(seconds)} ";
+
+        return result.Trim(); // Убираем лишние пробелы в конце
+    }
+
+    static string GetYearWord(int count)
+    {
+        if (count % 10 == 1 && count % 100 != 11) return "год";
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "года";
+        return "лет";
+    }
+
+    static string GetMonthWord(int count)
+    {
+        if (count % 10 == 1 && count % 100 != 11) return "месяц";
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "месяца";
+        return "месяцев";
+    }
+
+    static string GetDayWord(int count)
+    {
+        if (count % 10 == 1 && count % 100 != 11) return "день";
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "дня";
+        return "дней";
+    }
+
+    static string GetHourWord(int count)
+    {
+        if (count % 10 == 1 && count % 100 != 11) return "час";
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "часа";
+        return "часов";
+    }
+
+    static string GetMinuteWord(int count)
+    {
+        if (count % 10 == 1 && count % 100 != 11) return "минуту";
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "минуты";
+        return "минут";
+    }
+
+    static string GetSecondWord(int count)
+    {
+        if (count % 10 == 1 && count % 100 != 11) return "секунду";
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "секунды";
+        return "секунд";
     }
 }
