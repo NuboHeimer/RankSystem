@@ -4,7 +4,7 @@
 ///   Email:        nuboheimer@yandex.ru
 ///----------------------------------------------------------------------------
  
-///   Version:      0.2.2
+///   Version:      0.3.0
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
@@ -87,7 +87,6 @@ public class CPHInline
                 if (CPH.TryGetArg("coinsToAdd", out int coinsToAdd)) // записываем значение валюты за минуты просмотра, если она задана в настройках экшена
                     AddCoins(coinsToAdd, eventSource, userName, userId);
 
-                
             }
         }
 
@@ -218,6 +217,29 @@ public class CPHInline
         }
 
         CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
+        return true;
+    }
+
+    public bool AddCoins(){
+
+        if (!CPH.TryGetArg("userName", out string userName))
+            return false;
+
+       userName = userName.ToLower();
+        
+        if (!CPH.TryGetArg("userId", out string userId))
+            if (!CPH.TryGetArg("minichat.Data.UserID", out userId))
+                return false;
+
+        if (!CPH.TryGetArg("eventSource", out string eventSource))
+            if (!CPH.TryGetArg("commandSource", out eventSource))
+                return false;
+        
+        if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
+            return false;
+
+        AddCoins(coinsToAdd, eventSource, userName, userId);
+
         return true;
     }
 
