@@ -48,9 +48,6 @@ public class CPHInline
             if (currentViewers.Count == 0)
                 return true; // выходим, если список зрителей всё же пустой.
 
-            if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd)) // записываем значение валюты за минуты просмотра, если она задана в настройках экшена
-                coinsToAdd = 0; // или ставим её в ноль.
-
             if (!CPH.TryGetArg("timeToAdd", out int timeToAdd)) // записываем, сколько добавлять времени, если это задано в настройках экшене
                 timeToAdd = DEFAULT_TIME_TO_ADD; // или записываем дефолтное значение
 
@@ -86,8 +83,11 @@ public class CPHInline
                 }
 
                 CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
-                if (coinsToAdd > 0) // если указано количество валюты для добавления за время просмотра
+
+                if (CPH.TryGetArg("coinsToAdd", out int coinsToAdd)) // записываем значение валюты за минуты просмотра, если она задана в настройках экшена
                     AddCoins(coinsToAdd, eventSource, userName, userId);
+
+                
             }
         }
 
@@ -109,9 +109,6 @@ public class CPHInline
             if (viewersBlackList.Contains(userName))
                 return false;
         }
-
-        if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd)) // записываем значение валюты за сообщение, если она задана в настройках экшена
-            coinsToAdd = 0; // или ставим её в ноль.
 
         string userId = "";
 
@@ -141,8 +138,11 @@ public class CPHInline
         }
 
         CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
-        if (coinsToAdd > 0) // если указано количество валюты для добавления за сообщение
+
+        if (CPH.TryGetArg("coinsToAdd", out int coinsToAdd)) // записываем значение валюты за сообщение, если она задана в настройках экшена
             AddCoins(coinsToAdd, eventSource, userName, userId);
+
+        
 
         return true;
     }
@@ -161,9 +161,6 @@ public class CPHInline
             CPH.TryGetArg("minichat.Data.UserID", out userId);
 
         string viewerVariableName = userName + userId + eventSource + "RankSystem";
-
-        if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd)) // записываем значение валюты за фоллов, если она задана в настройках экшена
-            coinsToAdd = 0; // или ставим её в ноль.
         
         if (CPH.GetGlobalVar<string>(viewerVariableName, true) == null)
             InitializeUserGlobalVar(viewerVariableName, eventSource);
@@ -184,12 +181,16 @@ public class CPHInline
         }
 
         CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
-        if (coinsToAdd > 0) // если указано количество валюты для добавления за фоллов
-            AddCoins(coinsToAdd, eventSource, userName, userId);
 
         if (CPH.TryGetArg("game", out string game)){ // записываем категорию стрима, если она есть аргументах.
             AddGameWhenFollow(game, eventSource, userName, userId);
-        } 
+        }
+
+        if (CPH.TryGetArg("coinsToAdd", out int coinsToAdd)) // записываем значение валюты за фоллов, если она задана в настройках экшена
+            AddCoins(coinsToAdd, eventSource, userName, userId);
+
+        
+
         return true;
     }
 
