@@ -4,13 +4,18 @@
 ///   Email:        nuboheimer@yandex.ru
 ///----------------------------------------------------------------------------
  
-///   Version:      0.3.1
+///   Version:      0.3.2
 using System;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 
 public class CPHInline
 {
+    public void Init()
+    {
+        if (CPH.GetGlobalVar<List<string>>("rankSystemUserList", true) == null)
+            CPH.SetGlobalVar("rankSystemUserList", new List<string>(), true);
+    }
     private const int DEFAULT_TIME_TO_ADD = 60; // по умолчанию мы добавляем 60 секунд к времени просмотра.
     private bool InitializeUserGlobalVar(string viewerVariableName, string eventSource)
     {
@@ -23,6 +28,14 @@ public class CPHInline
         CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
 
         return true;
+    }
+
+    private void UpdateUserList(string viewerVariableName){
+        List<string> rankSystemUserList = CPH.GetGlobalVar<List<string>>("rankSystemUserList", true);
+        if (!rankSystemUserList.Contains(viewerVariableName)){
+            rankSystemUserList.Add(viewerVariableName);
+            CPH.SetGlobalVar("viewerVariableName", viewerVariableName, true);
+        }
     }
 
     public bool AddWatchTime()
@@ -82,6 +95,7 @@ public class CPHInline
                     userRankCollection[index] = new KeyValuePair<string, string>(keyToUpdate, newValue);
                 }
 
+                UpdateUserList(viewerVariableName);
                 CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
 
                 if (CPH.TryGetArg("coinsToAdd", out int coinsToAdd)) // записываем значение валюты за минуты просмотра, если она задана в настройках экшена
@@ -136,6 +150,7 @@ public class CPHInline
             
         }
 
+        UpdateUserList(viewerVariableName);
         CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
 
         if (CPH.TryGetArg("coinsToAdd", out int coinsToAdd)) // записываем значение валюты за сообщение, если она задана в настройках экшена
@@ -179,6 +194,7 @@ public class CPHInline
             userRankCollection[index] = new KeyValuePair<string, string>(keyToUpdate, newValue);
         }
 
+        UpdateUserList(viewerVariableName);
         CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
 
         if (CPH.TryGetArg("game", out string game)){ // записываем категорию стрима, если она есть аргументах.
@@ -238,6 +254,7 @@ public class CPHInline
         if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
             return false;
 
+        UpdateUserList(userName + userId + eventSource + "RankSystem");
         AddCoins(coinsToAdd, eventSource, userName, userId);
 
         return true;
