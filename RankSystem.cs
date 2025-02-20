@@ -3,8 +3,8 @@
 ///   Author:       NuboHeimer (https://live.vkvideo.ru/nuboheimer)
 ///   Email:        nuboheimer@yandex.ru
 ///----------------------------------------------------------------------------
- 
-///   Version:      0.1.0
+
+///   Version:      0.1.1
 
 using System;
 using System.Collections.Generic;
@@ -25,7 +25,12 @@ public class CPHInline
         {
             var service = NormalizeService(args["eventSource"].ToString());
             var user = GetUserFromArgs(service);
+
             user.MessageCount = 1;
+
+            if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
+                coinsToAdd = 0;
+            user.Coins = coinsToAdd;
 
             DatabaseManager.UpsertUser(user);
             return true;
@@ -72,11 +77,6 @@ public static class DatabaseManager
     private static SQLiteConnection _connection;
     private static readonly string DbPath = "RankSystem.db"; //Задаём путь до базы данных.
     private static readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
-
-    static DatabaseManager()
-    {
-        InitializeDatabase();
-    }
 
     public static void InitializeDatabase()
     {
