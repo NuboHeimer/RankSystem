@@ -27,7 +27,7 @@ public static class DatabaseManager
         InitializeDatabase();
     }
 
-    private static void InitializeDatabase()
+    public static void InitializeDatabase()
     {
         _lock.EnterWriteLock();
         try
@@ -51,12 +51,13 @@ public static class DatabaseManager
                         Coins INTEGER DEFAULT 0,
                         GameWhenFollow TEXT,
                         PRIMARY KEY (Service, UserId)
-                    );
-
-                    CREATE INDEX IF NOT EXISTS idx_service_user ON Users(Service, UserName);
-                    CREATE INDEX IF NOT EXISTS idx_user_cross ON Users(UserName, UserId);";
+                    );";
                 cmd.ExecuteNonQuery();
             }
+        }
+        catch (Exception ex)
+        {
+
         }
         finally
         {
@@ -74,13 +75,14 @@ public static class DatabaseManager
             {
                 cmd.CommandText = @"
                     INSERT OR REPLACE INTO Users 
+                    (Service, UserId, UserName, WatchTime, FollowDate, MessageCount, Coins, GameWhenFollow)
                     VALUES (
                         @Service, @UserId, @UserName, 
                         @WatchTime, @FollowDate, 
                         COALESCE((SELECT MessageCount FROM Users WHERE Service = @Service AND UserId = @UserId), 0) + @MessageCountInc,
                         COALESCE((SELECT Coins FROM Users WHERE Service = @Service AND UserId = @UserId), 0) + @CoinsInc,
                         COALESCE(@GameWhenFollow, (SELECT GameWhenFollow FROM Users WHERE Service = @Service AND UserId = @UserId))
-                    ";
+                    )";
 
                 cmd.Parameters.AddWithValue("@Service", user.Service);
                 cmd.Parameters.AddWithValue("@UserId", user.UserId);
@@ -94,6 +96,10 @@ public static class DatabaseManager
                 cmd.ExecuteNonQuery();
                 transaction.Commit();
             }
+        }
+        catch (SQLiteException ex)
+        {
+            throw;
         }
         finally
         {
@@ -113,10 +119,8 @@ public static class DatabaseManager
                     WHERE 
                         Service = @Service AND 
                         (UserId LIKE @Pattern OR UserName LIKE @Pattern)";
-
                 cmd.Parameters.AddWithValue("@Service", service);
                 cmd.Parameters.AddWithValue("@Pattern", $"%{searchPattern}%");
-
                 using (var reader = cmd.ExecuteReader())
                 {
                     return ReadUsers(reader).ToList();
@@ -154,13 +158,9 @@ public static class DatabaseManager
         {
             using (var cmd = new SQLiteCommand(_connection))
             {
-                cmd.CommandText = service != null
-                    ? $"UPDATE Users SET {counterName} = 0 WHERE Service = @Service"
-                    : $"UPDATE Users SET {counterName} = 0";
-
+                cmd.CommandText = service != null ? $"UPDATE Users SET {counterName} = 0 WHERE Service = @Service" : $"UPDATE Users SET {counterName} = 0";
                 if (service != null)
                     cmd.Parameters.AddWithValue("@Service", service);
-
                 cmd.ExecuteNonQuery();
             }
         }
@@ -173,33 +173,9 @@ public static class DatabaseManager
 
 public class CPHInline
 {
-    public void Init() => DatabaseManager.InitializeDatabase();
-
-    public bool AddWatchTime()
+    public void Init()
     {
-        try
-        {
-            var viewers = (List<Dictionary<string, object>>)args["users"];
-            var service = NormalizeService(args["eventSource"].ToString());
-            var timeToAdd = CPH.TryGetArg("timeToAdd", out int t) ? t : 60;
-
-            foreach (var viewer in viewers.Where(IsNotBlacklisted))
-            {
-                DatabaseManager.UpsertUser(new UserData
-                {
-                    Service = service,
-                    UserId = viewer["id"].ToString(),
-                    UserName = viewer["userName"].ToString().ToLower(),
-                    WatchTime = TimeSpan.FromSeconds(timeToAdd)
-                });
-            }
-            return true;
-        }
-        catch (Exception ex)
-        {
-            CPH.LogError($"AddWatchTime Error: {ex}");
-            return false;
-        }
+        DatabaseManager.InitializeDatabase();
     }
 
     public bool AddMessageCount()
@@ -220,28 +196,20 @@ public class CPHInline
         }
     }
 
-    public bool ResetMessageCounts() 
-    {
-        DatabaseManager.ResetCounter("MessageCount");
-        return true;
-    }
-
     private UserData GetUserFromArgs(string service)
     {
+        if (!CPH.TryGetArg("userId", out string UserId))
+            CPH.TryGetArg("minichat.Data.UserID", out UserId);
         return new UserData
         {
             Service = service,
-            UserId = args["userId"].ToString(),
+            UserId = UserId,
             UserName = args["userName"].ToString().ToLower()
         };
     }
 
-    private string NormalizeService(string service) => 
-        service.Equals("vkplay", StringComparison.OrdinalIgnoreCase) ? "vkvideolive" : service.ToLower();
-
-    private bool IsNotBlacklisted(Dictionary<string, object> viewer)
+    private string NormalizeService(string service)
     {
-        if (!CPH.TryGetArg("viewersBlackList", out string blacklist)) return true;
-        return !blacklist.ToLower().Split(';').Contains(viewer["userName"].ToString().ToLower());
+        return service.Equals("vkplay", StringComparison.OrdinalIgnoreCase) ? "vkvideolive" : service.ToLower();
     }
 }
