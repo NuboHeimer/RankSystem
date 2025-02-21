@@ -4,7 +4,7 @@
 ///   Email:        nuboheimer@yandex.ru
 ///----------------------------------------------------------------------------
  
-///   Version:      0.3.0
+///   Version:      0.4.0
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
@@ -72,11 +72,35 @@ public class CPHInline
             }
 
         return true;
-    } catch (Exception ex) {
-        CPH.LogError($"Ошибка в AddWatchTime: {ex}");
-        return false;
+        } catch (Exception ex) {
+            CPH.LogError($"Ошибка в AddWatchTime: {ex}");
+            return false;
+        }
     }
-}
+
+    public bool AddFollowDate() {
+        try {
+            
+            string service = NormalizeService();
+            var user = GetUserFromArgs(service);
+
+            if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
+                coinsToAdd = 0;
+            
+            if (CPH.TryGetArg("game", out string game)) // записываем категорию стрима, если она есть аргументах.
+
+            user.FollowDate = DateTime.Now;
+            user.GameWhenFollow = game;
+            user.Coins = coinsToAdd;
+
+            DatabaseManager.UpsertUser(user);
+
+            return true;
+        } catch (Exception ex) {
+            CPH.LogError($"[RankSystem] AddMessageCount Error: {ex}");
+            return false;
+        }
+    }
 
     private UserData GetUserFromArgs(string service, string userName, string ServiceUserId) {
         
