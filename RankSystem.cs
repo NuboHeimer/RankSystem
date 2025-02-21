@@ -4,7 +4,7 @@
 ///   Email:        nuboheimer@yandex.ru
 ///----------------------------------------------------------------------------
  
-///   Version:      0.5.0
+///   Version:      0.6.0
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
@@ -12,7 +12,7 @@ using System.Linq;
 using System.Threading;
 
 public class CPHInline {
-    private const int DEFAULT_TIME_TO_ADD = 60; // по умолчанию мы добавляем 60 секунд к времени просмотра.
+    private const int DEFAULT_TIME_TO_ADD = 60; // по умолчанию мы добавляем 60 скунд к времени просмотра.
     public void Init() {
         DatabaseManager.InitializeDatabase();
     }
@@ -477,6 +477,8 @@ public class CPHInline {
 }
 
 public class UserData {
+
+    public string UUID { get; set; }
     public string Service { get; set; }
     public string ServiceUserId { get; set; }
     public string UserName { get; set; }
@@ -508,6 +510,7 @@ public static class DatabaseManager {
                     PRAGMA synchronous = NORMAL;
                     
                     CREATE TABLE IF NOT EXISTS Users (
+                        UUID TEXT NOT NULL,
                         Service TEXT NOT NULL,
                         ServiceUserId TEXT NOT NULL,
                         UserName TEXT NOT NULL,
@@ -539,15 +542,19 @@ public static class DatabaseManager {
 
                 cmd.CommandText = @"
                     INSERT OR REPLACE INTO Users 
-                    (Service, ServiceUserId, UserName, WatchTime, FollowDate, MessageCount, Coins, GameWhenFollow)
+                    (UUID, Service, ServiceUserId, UserName, WatchTime, FollowDate, MessageCount, Coins, GameWhenFollow)
                     VALUES (
-                        @Service, @ServiceUserId, @UserName, 
+                        @UUID, @Service, @ServiceUserId, @UserName, 
                         COALESCE((SELECT WatchTime FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId), 0) + @WatchTimeInc,
                         @FollowDate, 
                         COALESCE((SELECT MessageCount FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId), 0) + @MessageCountInc,
                         COALESCE((SELECT Coins FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId), 0) + @CoinsInc,
                         COALESCE(@GameWhenFollow, (SELECT GameWhenFollow FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId))
                     )";
+                if (string.IsNullOrEmpty(user.UUID))
+                    user.UUID = Guid.NewGuid().ToString();
+                    
+                cmd.Parameters.AddWithValue("@UUID", user.UUID);
                 cmd.Parameters.AddWithValue("@Service", user.Service);
                 cmd.Parameters.AddWithValue("@ServiceUserId", user.ServiceUserId);
                 cmd.Parameters.AddWithValue("@UserName", user.UserName);
