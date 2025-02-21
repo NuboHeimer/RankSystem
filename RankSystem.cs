@@ -4,7 +4,7 @@
 ///   Email:        nuboheimer@yandex.ru
 ///----------------------------------------------------------------------------
  
-///   Version:      0.4.0
+///   Version:      0.5.0
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
@@ -283,6 +283,20 @@ public class CPHInline {
             return false;
 
         }
+    }
+
+    public bool ClearUsersCoins() {
+
+        List<UserData> users = DatabaseManager.GetUserData();
+
+        foreach(UserData user in users) {
+
+            user.Coins = 0 - user.Coins;
+            DatabaseManager.UpsertUser(user);
+
+        }
+
+        return true;
     }
 
     private UserData GetUserFromArgs(string service, string userName, string ServiceUserId) {
@@ -592,4 +606,45 @@ public static class DatabaseManager {
             _lock.ExitReadLock();
         }
     }
+
+        public static List<UserData> GetUserData() {
+            // TODO: Refactor. Тут получается дублирование кода.
+
+            _lock.EnterReadLock();
+
+            List<UserData> users = new List<UserData>();
+
+            try {
+
+                using (var cmd = new SQLiteCommand(_connection)) {
+
+                    cmd.CommandText = @"SELECT * FROM Users";
+
+                    using (var reader = cmd.ExecuteReader()) {
+
+                        while (reader.Read()) {
+
+                            var userData = new UserData {
+
+                                Service = reader["Service"].ToString(),
+                                ServiceUserId = reader["ServiceUserId"].ToString(),
+                                UserName = reader["UserName"].ToString(),
+                                WatchTime = Convert.ToInt64(reader["WatchTime"]),
+                                FollowDate = DateTime.Parse(reader["FollowDate"].ToString()),
+                                MessageCount = Convert.ToInt64(reader["MessageCount"]),
+                                Coins = Convert.ToInt64(reader["Coins"]),
+                                GameWhenFollow = reader["GameWhenFollow"]?.ToString()
+                            };
+
+                            if (userData.Coins > 0)
+                                users.Add(userData);
+                        }
+                    }
+                }
+
+                return users;
+            } finally {
+                _lock.ExitReadLock();
+            }
+        }
 }
