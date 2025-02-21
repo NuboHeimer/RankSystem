@@ -4,7 +4,7 @@
 ///   Email:        nuboheimer@yandex.ru
 ///----------------------------------------------------------------------------
  
-///   Version:      0.5.0
+///   Version:      0.4.0
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
