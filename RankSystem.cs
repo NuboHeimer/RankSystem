@@ -4,392 +4,332 @@
 ///   Email:        nuboheimer@yandex.ru
 ///----------------------------------------------------------------------------
  
-///   Version:      0.3.2
+///   Version:      0.4.0
 using System;
 using System.Collections.Generic;
-using Newtonsoft.Json;
+using System.Data.SQLite;
+using System.Linq;
+using System.Threading;
 
-public class CPHInline
-{
-    public void Init()
-    {
-        if (CPH.GetGlobalVar<List<string>>("rankSystemUserList", true) == null)
-            CPH.SetGlobalVar("rankSystemUserList", new List<string>(), true);
-    }
+public class CPHInline {
     private const int DEFAULT_TIME_TO_ADD = 60; // по умолчанию мы добавляем 60 секунд к времени просмотра.
-    private bool InitializeUserGlobalVar(string viewerVariableName, string eventSource)
-    {
-        var userRankCollection = new List<KeyValuePair<string, string>>();
-        userRankCollection.Add(new KeyValuePair<string, string>("WatchTime", "0"));
-        userRankCollection.Add(new KeyValuePair<string, string>("MessageCount", "0"));
-        userRankCollection.Add(new KeyValuePair<string, string>("FollowDate", null));
-        userRankCollection.Add(new KeyValuePair<string, string>("Rank", null));
-
-        CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
-
-        return true;
+    public void Init() {
+        DatabaseManager.InitializeDatabase();
     }
 
-    private void UpdateUserList(string viewerVariableName){
-        List<string> rankSystemUserList = CPH.GetGlobalVar<List<string>>("rankSystemUserList", true);
-        if (!rankSystemUserList.Contains(viewerVariableName)){
-            rankSystemUserList.Add(viewerVariableName);
-            CPH.SetGlobalVar("viewerVariableName", viewerVariableName, true);
+    public bool AddMessageCount() {
+
+        try {
+
+            string service = NormalizeService();
+            var user = GetUserFromArgs(service);
+
+            if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
+                coinsToAdd = 0;
+
+            user.MessageCount = 1;
+            user.Coins = coinsToAdd;
+
+            DatabaseManager.UpsertUser(user);
+
+            return true;
+
+        } catch (Exception ex) {
+
+            CPH.LogError($"[RankSystem] AddMessageCount Error: {ex}");
+            return false;
+
         }
     }
 
-    public bool AddWatchTime()
-    {
-        string eventSource = "Test";
-        var userRankCollection = new List<KeyValuePair<string, string>>();
+    public bool AddWatchTime() {
+        try {
 
-        if (args["eventSource"].ToString().ToLower().Equals("misc")) // если в eventSource лежит misc -- значит это не дефолтный PresentVieewr.
-        {
-            if (args.ContainsKey("timerId")) // если это кастомный таймер -- надо понять, какой именно.
-            {
-                if (args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || args["timerName"].ToString().ToLower().Equals("vkvideolive"))
-                    eventSource = "vkvideolive";
-            }
-        }
-        else
-            eventSource = args["eventSource"].ToString().ToLower(); // иначе просто берём источник события.
+            if (!args.ContainsKey("users"))
+                CPH.LogWarn("Список пользователей пуст или отсутствует.");
 
-        if (args.ContainsKey("users")) // защита от дурака с пустым аргументом списка пользователей.
-        {
             var currentViewers = (List<Dictionary<string, object>>)args["users"];
 
             if (currentViewers.Count == 0)
-                return true; // выходим, если список зрителей всё же пустой.
+                CPH.LogWarn("Список пользователей пуст.");
 
-            if (!CPH.TryGetArg("timeToAdd", out int timeToAdd)) // записываем, сколько добавлять времени, если это задано в настройках экшене
-                timeToAdd = DEFAULT_TIME_TO_ADD; // или записываем дефолтное значение
+            string service = NormalizeService();
 
-            foreach (var viewer in currentViewers) // проходимся по зрителям в списке.
-            {
+            if (!CPH.TryGetArg("timeToAdd", out int timeToAdd))
+                timeToAdd = DEFAULT_TIME_TO_ADD;
+
+            foreach (var viewer in currentViewers) {
+
                 string userName = viewer["userName"].ToString().ToLower();
                 string userId = viewer["id"].ToString();
-                
-                if (CPH.TryGetArg("viewersBlackList", out string tempViewersBlackList)) // проверяем чёрный список зрителей.
-                {
-                    List<string> viewersBlackList = new List<string>(tempViewersBlackList.ToLower().Split(';'));
-                    if (viewersBlackList.Contains(userName))
-                        continue; // пропускаем итерацию если существует чёрный список зрителей и текущий в нём есть.
-                }
 
-                string viewerVariableName = userName + userId + eventSource + "RankSystem";
+                var user = GetUserFromArgs(service, userName, userId);
 
-                if (CPH.GetGlobalVar<string>(viewerVariableName, true) == null) // если для текущего зрителя ещё нет глобальной переменной -- инициализируем её.
-                    InitializeUserGlobalVar(viewerVariableName, eventSource);
+                if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
+                    coinsToAdd = 0;
 
-                string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
-                userRankCollection = new List<KeyValuePair<string, string>>();
-                userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
-                string keyToUpdate = "WatchTime";
-                int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToUpdate);
-                
-                if (index == -1)
-                    userRankCollection.Add(new KeyValuePair<string, string>(keyToUpdate, timeToAdd.ToString())); // если у пользователя ещё нет времени просмотра задаём начальное значение.
-                else
-                {
-                    string newValue = (int.Parse(userRankCollection[index].Value) + timeToAdd).ToString(); // добавляем время просмотра
-                    userRankCollection[index] = new KeyValuePair<string, string>(keyToUpdate, newValue);
-                }
+                user.Coins = coinsToAdd;
+                user.WatchTime = timeToAdd;
 
-                UpdateUserList(viewerVariableName);
-                CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
-
-                if (CPH.TryGetArg("coinsToAdd", out int coinsToAdd)) // записываем значение валюты за минуты просмотра, если она задана в настройках экшена
-                    AddCoins(coinsToAdd, eventSource, userName, userId);
-
+                DatabaseManager.UpsertUser(user);
             }
-        }
 
-        return true;
+            return true;
+        } catch (Exception ex) {
+
+            CPH.LogError($"Ошибка в AddWatchTime: {ex}");
+            return false;
+
+        }
     }
 
-    public bool AddMessageCount()
-    {
-        var userRankCollection = new List<KeyValuePair<string, string>>();
-        string eventSource = args["eventSource"].ToString().ToLower();
-        
-        if (eventSource.Equals("vkplay"))
-            eventSource = "vkvideolive";
-        
-        string userName = args["userName"].ToString().ToLower();
-        if (CPH.TryGetArg("viewersBlackList", out string tempViewersBlackList))
-        {
-            List<string> viewersBlackList = new List<string>(tempViewersBlackList.ToLower().Split(';'));
-            if (viewersBlackList.Contains(userName))
-                return false;
+    public bool AddFollowDate()  {
+
+        try {
+
+            string service = NormalizeService();
+
+            var user = GetUserFromArgs(service);
+
+            if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
+                coinsToAdd = 0;
+
+            if (CPH.TryGetArg("game", out string game)) // записываем категорию стрима, если она есть аргументах.
+                
+            user.FollowDate = DateTime.Now;
+            user.GameWhenFollow = game;
+            user.Coins = coinsToAdd;
+
+            DatabaseManager.UpsertUser(user);
+
+            return true;
+        } catch (Exception ex) {
+
+            CPH.LogError($"[RankSystem] AddFollowDate Error: {ex}");
+            return false;
+
         }
+    }
 
-        string userId = "";
+    public bool AddCoins() {
 
-        if (!CPH.TryGetArg("userId", out userId))
-            CPH.TryGetArg("minichat.Data.UserID", out userId);
+        try {
+
+            string service = NormalizeService();
+
+            var user = GetUserFromArgs(service);
+
+            if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
+                coinsToAdd = 0;
+
+            user.Coins = coinsToAdd;
+            DatabaseManager.UpsertUser(user);
+
+            return true;
+        } catch (Exception ex) {
+            CPH.LogError($"[RankSystem] AddCoins Error: {ex}");
+            return false;
+        }
+    }
+
+    public bool GetWatchTime() {
+
+        try {
+
+            string service = NormalizeService();
+
+            var user = GetUserFromArgs(service);
+
+            var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
+
+            var watchTime = userData?.WatchTime ?? 0;
+
+            CPH.SetArgument("watchTime", watchTime);
+
+            string message = "Запрошенная информация не найдена!";
+
+            if (watchTime != 0)
+                message = FormatDateTime(watchTime);
+
+            SendReply(message, service);
+
+            return true;
+        } catch (Exception ex) {
+
+            CPH.LogError($"[RankSystem] GetWatchTime Error: {ex}");
+            return false;
+
+        }
+    }
+
+    public bool GetFollowDate() {
+
+        try {
+
+            string service = NormalizeService();
+
+            var user = GetUserFromArgs(service);
+
+            var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
+
+            var followDate = userData?.FollowDate.ToString("o") ?? string.Empty;
+
+            CPH.SetArgument("followDate", followDate);
+
+            string message = "Запрошенная информация не найдена!";
+
+            if (!string.IsNullOrEmpty(followDate))
+                message = followDate;
+
+            SendReply(message, service);
 
 
-        string viewerVariableName = userName + userId + eventSource + "RankSystem";
-        
-        if (CPH.GetGlobalVar<string>(viewerVariableName, true) == null)
-            InitializeUserGlobalVar(viewerVariableName, eventSource);
+            return true;
+        } catch (Exception ex) {
 
-        string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
-        userRankCollection = new List<KeyValuePair<string, string>>();
-        userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
-        string keyToUpdate = "MessageCount";
-        int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToUpdate);
-        
-        if (index == -1)
-            userRankCollection.Add(new KeyValuePair<string, string>(keyToUpdate, "1"));
+            CPH.LogError($"[RankSystem] GetFollowDate Error: {ex}");
+            return false;
 
-        if (index != -1)
-        {
-            string newValue = (int.Parse(userRankCollection[index].Value) + 1).ToString();
-            userRankCollection[index] = new KeyValuePair<string, string>(keyToUpdate, newValue);
+        }
+    }
+
+    public bool GetMessageCount() {
+
+        try {
+
+            string service = NormalizeService();
+
+            var user = GetUserFromArgs(service);
+
+            var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
+
+            var messageCount = userData?.MessageCount ?? 0;
+
+            CPH.SetArgument("messageCount", messageCount);
+
+            string message = "Запрошенная информация не найдена!";
+
+            if (messageCount != 0)
+                message = messageCount.ToString();
+
+            SendReply(message, service);
+
+            return true;
+        } catch (Exception ex) {
+
+            CPH.LogError($"[RankSystem] GetMessageCount Error: {ex}");
+            return false;
+
+        }
+    }
+
+    public bool GetCoins() {
+
+        try {
+
+            string service = NormalizeService();
+
+            var user = GetUserFromArgs(service);
+
+            var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
+
             
-        }
+            var coins = userData?.Coins ?? 0;
 
-        UpdateUserList(viewerVariableName);
-        CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
+            CPH.SetArgument("coins", coins);
 
-        if (CPH.TryGetArg("coinsToAdd", out int coinsToAdd)) // записываем значение валюты за сообщение, если она задана в настройках экшена
-            AddCoins(coinsToAdd, eventSource, userName, userId);
+            string message = "Запрошенная информация не найдена!";
 
-        
+            if (coins != 0)
+                message = coins.ToString();
 
-        return true;
-    }
+            SendReply(message, service);
+            return true;
+            
+        } catch (Exception ex) {
 
-    public bool AddFollowDate()
-    {
-        var userRankCollection = new List<KeyValuePair<string, string>>();
-        string eventSource = args["eventSource"].ToString().ToLower();
-        if (eventSource.Equals("vkplay"))
-            eventSource = "vkvideolive";
-        string userName = args["userName"].ToString().ToLower();
-        
-        string userId = "";
-        
-        if (!CPH.TryGetArg("userId", out userId))
-            CPH.TryGetArg("minichat.Data.UserID", out userId);
-
-        string viewerVariableName = userName + userId + eventSource + "RankSystem";
-        
-        if (CPH.GetGlobalVar<string>(viewerVariableName, true) == null)
-            InitializeUserGlobalVar(viewerVariableName, eventSource);
-
-        string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
-        userRankCollection = new List<KeyValuePair<string, string>>();
-        userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
-        string keyToUpdate = "FollowDate";
-        int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToUpdate);
-        
-        if (index == -1)
-            userRankCollection.Add(new KeyValuePair<string, string>(keyToUpdate, DateTime.Now.ToString()));
-
-        if (index != -1)
-        {
-            string newValue = DateTime.Now.ToString();
-            userRankCollection[index] = new KeyValuePair<string, string>(keyToUpdate, newValue);
-        }
-
-        UpdateUserList(viewerVariableName);
-        CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
-
-        if (CPH.TryGetArg("game", out string game)){ // записываем категорию стрима, если она есть аргументах.
-            AddGameWhenFollow(game, eventSource, userName, userId);
-        }
-
-        if (CPH.TryGetArg("coinsToAdd", out int coinsToAdd)) // записываем значение валюты за фоллов, если она задана в настройках экшена
-            AddCoins(coinsToAdd, eventSource, userName, userId);
-
-        
-
-        return true;
-    }
-
-    private bool AddCoins(int coinsToAdd, string eventSource, string targetUser, string userId)
-    {
-        var userRankCollection = new List<KeyValuePair<string, string>>();
-        string viewerVariableName = targetUser + userId + eventSource + "RankSystem";
-        
-        if (CPH.GetGlobalVar<string>(viewerVariableName, true) == null)
-            InitializeUserGlobalVar(viewerVariableName, eventSource);
-
-        string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
-        userRankCollection = new List<KeyValuePair<string, string>>();
-        userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
-        string keyToUpdate = "Coins";
-        int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToUpdate);
-        
-        if (index == -1)
-            userRankCollection.Add(new KeyValuePair<string, string>(keyToUpdate, coinsToAdd.ToString()));
-
-        if (index != -1)
-        {
-            string newValue = (int.Parse(userRankCollection[index].Value) + coinsToAdd).ToString();
-            userRankCollection[index] = new KeyValuePair<string, string>(keyToUpdate, newValue);
-        }
-
-        CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
-        return true;
-    }
-
-    public bool AddCoins(){
-
-        if (!CPH.TryGetArg("userName", out string userName))
+            CPH.LogError($"[RankSystem] GetCoins Error: {ex}");
             return false;
 
-       userName = userName.ToLower();
-        
-        if (!CPH.TryGetArg("userId", out string userId))
-            if (!CPH.TryGetArg("minichat.Data.UserID", out userId))
-                return false;
-
-        if (!CPH.TryGetArg("eventSource", out string eventSource))
-            if (!CPH.TryGetArg("commandSource", out eventSource))
-                return false;
-        
-        if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
-            return false;
-
-        UpdateUserList(userName + userId + eventSource + "RankSystem");
-        AddCoins(coinsToAdd, eventSource, userName, userId);
-
-        return true;
-    }
-
-    public bool GetWatchTime()
-    {
-        if (!CPH.TryGetArg("commandSource", out string commandSource))
-            return false;
-
-        if (commandSource.ToLower().Equals("vkplay"))
-            commandSource = "vkvideolive";
-
-        if (!CPH.TryGetArg("userName", out string userName))
-            return false;
-
-        string userId = "";
-        
-        if (!CPH.TryGetArg("userId", out userId))
-            CPH.TryGetArg("minichat.Data.UserID", out userId);
-
-        string viewerVariableName = userName.ToLower() + userId + commandSource.ToLower() + "RankSystem";
-
-        string message = "Запрошенная информация не найдена!";
-        var userRankCollection = new List<KeyValuePair<string, string>>();
-        
-        if (CPH.GetGlobalVar<string>(viewerVariableName, true) != null)
-        {
-            string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
-            userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
-            string keyToShow = "WatchTime";
-            int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToShow);
-            if (index != -1) {
-                long userWatchTime = long.Parse(userRankCollection[index].Value);
-                message = FormatDateTime(userWatchTime);
-            }
         }
-        SendReply(message, commandSource.ToLower());
-        return true;
     }
 
-    public bool GetCoins()
-    {
-        if (!CPH.TryGetArg("commandSource", out string commandSource))
+    public bool GetGameWhenFollow() {
+
+        try {
+
+            string service = NormalizeService();
+
+            var user = GetUserFromArgs(service);
+
+            var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
+
+            var gameWhenFollow = userData?.GameWhenFollow ?? string.Empty;
+
+            CPH.SetArgument("gameWhenFollow", gameWhenFollow);
+
+            string message = "Запрошенная информация не найдена!";
+
+            if (!string.IsNullOrEmpty(gameWhenFollow))
+                message = gameWhenFollow;
+
+            SendReply(message, service);
+
+            return true;
+
+        } catch (Exception ex) {
+
+            CPH.LogError($"[RankSystem] GetGameWhenFollow Error: {ex}");
             return false;
-        
-        if (commandSource.ToLower().Equals("vkplay"))
-            commandSource = "vkvideolive";
 
-        if (!CPH.TryGetArg("userName", out string userName))
-            return false;
-
-        string userId = "";
-        
-        if (!CPH.TryGetArg("userId", out userId))
-            CPH.TryGetArg("minichat.Data.UserID", out userId);
-
-        string viewerVariableName = userName.ToLower() + userId + commandSource.ToLower() + "RankSystem";
-        string message = "Запрошенная информация не найдена!";
-        var userRankCollection = new List<KeyValuePair<string, string>>();
-        
-        if (CPH.GetGlobalVar<string>(viewerVariableName, true) != null)
-        {
-            string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
-            userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
-            string keyToShow = "Coins";
-            int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToShow);
-            if (index != -1) {
-                message = userRankCollection[index].Value.ToString();         
-            }
         }
-        SendReply(message, commandSource.ToLower());
-        return true;
     }
 
-    public bool GetGameWhenFollow()
-    {
-        if (!CPH.TryGetArg("commandSource", out string commandSource))
-            return false;
-        
-        if (commandSource.ToLower().Equals("vkplay"))
-            commandSource = "vkvideolive";
+    private UserData GetUserFromArgs(string service, string userName, string ServiceUserId) {
 
-        if (!CPH.TryGetArg("userName", out string userName))
-            return false;
+        return new UserData {
 
-        string userId = "";
-        
-        if (!CPH.TryGetArg("userId", out userId))
-            CPH.TryGetArg("minichat.Data.UserID", out userId);
+            Service = service,
+            ServiceUserId = ServiceUserId,
+            UserName = userName
 
-        string viewerVariableName = userName.ToLower() + userId + commandSource.ToLower() + "RankSystem";
-        string message = "Запрошенная информация не найдена!";
-        var userRankCollection = new List<KeyValuePair<string, string>>();
-        
-        if (CPH.GetGlobalVar<string>(viewerVariableName, true) != null)
-        {
-            string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
-            userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
-            string keyToShow = "GameWhenFollow";
-            int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToShow);
-            if (index != -1) {
-                message = userRankCollection[index].Value.ToString();         
-            }
-        }
-        SendReply(message, commandSource.ToLower());
-        return true;
+        };
     }
 
-    private void AddGameWhenFollow(string gameToAdd, string eventSource, string targetUser, string userId){
-        
-        var userRankCollection = new List<KeyValuePair<string, string>>();
-        string viewerVariableName = targetUser + userId + eventSource + "RankSystem";
-        
-        if (CPH.GetGlobalVar<string>(viewerVariableName, true) == null)
-            InitializeUserGlobalVar(viewerVariableName, eventSource);
+    private UserData GetUserFromArgs(string service) {
 
-        string userRankInfo = CPH.GetGlobalVar<string>(viewerVariableName);
-        userRankCollection = new List<KeyValuePair<string, string>>();
-        userRankCollection = JsonConvert.DeserializeObject<List<KeyValuePair<string, string>>>(userRankInfo);
-        string keyToUpdate = "GameWhenFollow";
-        int index = userRankCollection.FindIndex(kvp => kvp.Key == keyToUpdate);
-        
-        if (index == -1)
-            userRankCollection.Add(new KeyValuePair<string, string>(keyToUpdate, gameToAdd.ToString()));
+        if (!CPH.TryGetArg("userId", out string ServiceUserId))
+            CPH.TryGetArg("minichat.Data.UserID", out ServiceUserId);
 
-        if (index != -1)
-        {
-            userRankCollection[index] = new KeyValuePair<string, string>(keyToUpdate, gameToAdd);
-        }
+        return new UserData {
 
-        CPH.SetGlobalVar(viewerVariableName, JsonConvert.SerializeObject(userRankCollection), true);
+            Service = service,
+            ServiceUserId = ServiceUserId,
+            UserName = args["userName"].ToString().ToLower()
+
+        };
     }
 
-    private bool SendReply(string message, string target){
+    private string NormalizeService() {
+
+        // TODO: Refactor. Выглядит как говно.
+        if (!CPH.TryGetArg("eventSource", out string service))
+            if (!CPH.TryGetArg("commandSource", out service))
+                if (service.Equals("misc"))
+                {
+                    if (args.ContainsKey("timerId") && (args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || args["timerName"].ToString().ToLower().Equals("vkvideolive")))
+                    {
+                        service = "vkvideolive";
+                    }
+                }
+
+        if (service.Equals("command"))
+            service = args["commandSource"].ToString();
+        return service.Equals("vkplay", StringComparison.OrdinalIgnoreCase) ? "vkvideolive" : service.ToLower();
+
+    }
+
+    private bool SendReply(string message, string target) {
 
         if (target.Equals("twitch"))
             CPH.SendMessage(message);
@@ -399,15 +339,18 @@ public class CPHInline
 
         else if (target.Equals("trovo"))
             CPH.SendTrovoMessage(message);
-        
         else {
+
             CPH.SetArgument("message", message);
             CPH.ExecuteMethod("MiniChat Method Collection", "SendMessageReply");
-        } 
+
+        }
+
         return true;
     }
-    public string FormatDateTime(long totalSeconds)
-    {
+
+    public string FormatDateTime(long totalSeconds) {
+
         // Преобразуем общее количество секунд в годы, месяцы, дни, часы, минуты и секунды.
         int years = 0;
         int months = 0;
@@ -416,75 +359,237 @@ public class CPHInline
         int minutes = (int)((totalSeconds % (60 * 60)) / 60);
         int seconds = (int)(totalSeconds % 60);
 
-        if (days >= 365)
-        {
+        if (days >= 365) {
+
             years = days / 365; // Примерно считаем годы
             days %= 365; // Остаток дней после вычисления лет
+
         }
 
-        if (days >= 30) // Примерно считаем месяцы
-        {
+        if (days >= 30) {
+
             months = days / 30;
             days %= 30; // Остаток дней после вычисления месяцев
+
         }
 
         string result = "";
 
         if (years > 0)
             result += $"{years.ToString()} {GetYearWord(years)} ";
+
         if (months > 0)
             result += $"{months.ToString()} {GetMonthWord(months)} ";
+
         if (days > 0)
             result += $"{days.ToString()} {GetDayWord(days)} ";
+
         if (hours > 0)
             result += $"{hours.ToString()} {GetHourWord(hours)} ";
+
         if (minutes > 0)
             result += $"{minutes.ToString()} {GetMinuteWord(minutes)} ";
+
         if (seconds > 0)
             result += $"{seconds.ToString()} {GetSecondWord(seconds)} ";
 
         return result.Trim(); // Убираем лишние пробелы в конце
     }
 
-    static string GetYearWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11) return "год";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "года";
+    static string GetYearWord(int count) {
+
+        if (count % 10 == 1 && count % 100 != 11)
+            return "год";
+
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "года";
+
         return "лет";
     }
 
-    static string GetMonthWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11) return "месяц";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "месяца";
+    static string GetMonthWord(int count) {
+
+        if (count % 10 == 1 && count % 100 != 11)
+            return "месяц";
+
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "месяца";
+
         return "месяцев";
     }
 
-    static string GetDayWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11) return "день";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "дня";
+    static string GetDayWord(int count) {
+
+        if (count % 10 == 1 && count % 100 != 11)
+            return "день";
+
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "дня";
+
         return "дней";
     }
 
-    static string GetHourWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11) return "час";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "часа";
+    static string GetHourWord(int count) {
+
+        if (count % 10 == 1 && count % 100 != 11)
+            return "час";
+
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "часа";
+
         return "часов";
     }
 
-    static string GetMinuteWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11) return "минуту";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "минуты";
+    static string GetMinuteWord(int count) {
+
+        if (count % 10 == 1 && count % 100 != 11)
+            return "минуту";
+
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "минуты";
+
         return "минут";
     }
 
-    static string GetSecondWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11) return "секунду";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "секунды";
+    static string GetSecondWord(int count) {
+        if (count % 10 == 1 && count % 100 != 11)
+            return "секунду";
+
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "секунды";
+
         return "секунд";
+    }
+}
+
+public class UserData {
+    public string Service { get; set; }
+    public string ServiceUserId { get; set; }
+    public string UserName { get; set; }
+    public long WatchTime { get; set; }
+    public DateTime FollowDate { get; set; }
+    public long MessageCount { get; set; }
+    public long Coins { get; set; }
+    public string GameWhenFollow { get; set; }
+}
+
+public static class DatabaseManager {
+    private static SQLiteConnection _connection;
+    // TODO: Надо что-то придумать с хардкодом пути до базы. Но, на первый взгляд, отсюда не получить аргументы среды выполнения.
+    private static readonly string DbPath = "RankSystem.db";
+    private static readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
+    public static void InitializeDatabase() {
+
+        _lock.EnterWriteLock();
+
+        try {
+
+            _connection = new SQLiteConnection($"Data Source={DbPath};Version=3;");
+            _connection.Open();
+
+            using (var cmd = new SQLiteCommand(_connection)) {
+
+                cmd.CommandText = @"
+                    PRAGMA journal_mode = WAL;
+                    PRAGMA synchronous = NORMAL;
+                    
+                    CREATE TABLE IF NOT EXISTS Users (
+                        Service TEXT NOT NULL,
+                        ServiceUserId TEXT NOT NULL,
+                        UserName TEXT NOT NULL,
+                        WatchTime LONG DEFAULT 0,
+                        FollowDate TEXT NOT NULL,
+                        MessageCount LONG DEFAULT 0,
+                        Coins LONG DEFAULT 0,
+                        GameWhenFollow TEXT,
+                        PRIMARY KEY (Service, ServiceUserId)
+                    );";
+                cmd.ExecuteNonQuery();
+            }
+        } catch (Exception ex) {
+        // TODO: Добавить логгер. Можно подсмотреть у Пликода.
+        } finally {
+
+            _lock.ExitWriteLock();
+
+        }
+    }
+
+    public static void UpsertUser(UserData user) {
+
+        _lock.EnterWriteLock();
+
+        try {
+            using (var transaction = _connection.BeginTransaction())
+            using (var cmd = new SQLiteCommand(_connection)) {
+
+                cmd.CommandText = @"
+                    INSERT OR REPLACE INTO Users 
+                    (Service, ServiceUserId, UserName, WatchTime, FollowDate, MessageCount, Coins, GameWhenFollow)
+                    VALUES (
+                        @Service, @ServiceUserId, @UserName, 
+                        COALESCE((SELECT WatchTime FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId), 0) + @WatchTimeInc,
+                        @FollowDate, 
+                        COALESCE((SELECT MessageCount FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId), 0) + @MessageCountInc,
+                        COALESCE((SELECT Coins FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId), 0) + @CoinsInc,
+                        COALESCE(@GameWhenFollow, (SELECT GameWhenFollow FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId))
+                    )";
+                cmd.Parameters.AddWithValue("@Service", user.Service);
+                cmd.Parameters.AddWithValue("@ServiceUserId", user.ServiceUserId);
+                cmd.Parameters.AddWithValue("@UserName", user.UserName);
+                cmd.Parameters.AddWithValue("@WatchTimeInc", user.WatchTime);
+                cmd.Parameters.AddWithValue("@FollowDate", user.FollowDate.ToString("o"));
+                cmd.Parameters.AddWithValue("@MessageCountInc", user.MessageCount);
+                cmd.Parameters.AddWithValue("@CoinsInc", user.Coins);
+                cmd.Parameters.AddWithValue("@GameWhenFollow", user.GameWhenFollow);
+                cmd.ExecuteNonQuery();
+                transaction.Commit();
+            }
+        } catch (SQLiteException ex) {
+            throw; // TODO логгер. Можно подсмотреть у Пликода.
+        } finally {
+            _lock.ExitWriteLock();
+        }
+    }
+
+    public static UserData GetUserData(string service, string serviceUserId) {
+
+        _lock.EnterReadLock();
+
+        try {
+
+            using (var cmd = new SQLiteCommand(_connection)) {
+
+                cmd.CommandText = @"
+                    SELECT * FROM Users 
+                    WHERE Service = @Service 
+                    AND ServiceUserId = @ServiceUserId";
+
+                cmd.Parameters.AddWithValue("@Service", service);
+                cmd.Parameters.AddWithValue("@ServiceUserId", serviceUserId);
+
+                using (var reader = cmd.ExecuteReader()) {
+
+                    if (reader.Read()) {
+
+                        return new UserData {
+
+                            Service = reader["Service"].ToString(),
+                            ServiceUserId = reader["ServiceUserId"].ToString(),
+                            UserName = reader["UserName"].ToString(),
+                            WatchTime = Convert.ToInt64(reader["WatchTime"]),
+                            FollowDate = DateTime.Parse(reader["FollowDate"].ToString()),
+                            MessageCount = Convert.ToInt64(reader["MessageCount"]),
+                            Coins = Convert.ToInt64(reader["Coins"]),
+                            GameWhenFollow = reader["GameWhenFollow"]?.ToString()
+                        };
+                    }
+                }
+            }
+
+            return null;
+        } finally {
+            _lock.ExitReadLock();
+        }
     }
 }
