@@ -4,7 +4,7 @@
 ///   Email:        nuboheimer@yandex.ru
 ///----------------------------------------------------------------------------
  
-///   Version:      0.2.0
+///   Version:      0.3.0
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
@@ -13,136 +13,106 @@ using System.Threading;
 
 public class CPHInline
 {
-    public void Init()
-    {
+
+    private const int DEFAULT_TIME_TO_ADD = 60; // по умолчанию мы добавляем 60 секунд к времени просмотра.
+    public void Init() {
         DatabaseManager.InitializeDatabase();
     }
 
-    public bool AddMessageCount()
-    {
-        try
-        {
-            var service = NormalizeService(args["eventSource"].ToString());
+    public bool AddMessageCount() {
+        try {
+            
+            string service = NormalizeService();
             var user = GetUserFromArgs(service);
-            user.MessageCount = 1;
+
             if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
                 coinsToAdd = 0;
+
+            user.MessageCount = 1;
             user.Coins = coinsToAdd;
+
             DatabaseManager.UpsertUser(user);
+
             return true;
-        }
-        catch (Exception ex)
-        {
-            CPH.LogError($"AddMessageCount Error: {ex}");
+        } catch (Exception ex) {
+            CPH.LogError($"[RankSystem] AddMessageCount Error: {ex}");
             return false;
         }
     }
 
-    public bool AddWatchTime()
-{
-    try
-    {
-        // Определяем источник события
-        string service = args["eventSource"].ToString().ToLower();
+    public bool AddWatchTime() {
+        try {
+            if (!args.ContainsKey("users"))
+                CPH.LogWarn("Список пользователей пуст или отсутствует.");
 
-        // Если источник события — "misc", проверяем таймер
-        if (service.Equals("misc"))
-        {
-            if (args.ContainsKey("timerId") && 
-                (args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || 
-                 args["timerName"].ToString().ToLower().Equals("vkvideolive")))
-            {
-                service = "vkvideolive";
-            }
-        }
+            var currentViewers = (List<Dictionary<string, object>>)args["users"];
 
-        // Проверяем наличие списка пользователей
-        if (!args.ContainsKey("users"))
-        {
-            CPH.LogWarn("Список пользователей пуст или отсутствует.");
-            return true; // Выходим, если список пользователей пуст
-        }
+            if (currentViewers.Count == 0)
+                CPH.LogWarn("Список пользователей пуст.");
 
-        var currentViewers = (List<Dictionary<string, object>>)args["users"];
-        if (currentViewers.Count == 0)
-        {
-            CPH.LogWarn("Список пользователей пуст.");
-            return true; // Выходим, если список пользователей пуст
-        }
+            string service = NormalizeService();
 
-        // Получаем время для добавления (по умолчанию 60 секунд)
-        if (!CPH.TryGetArg("timeToAdd", out int timeToAdd))
-        {
-            timeToAdd = 60; // Дефолтное значение: 60 секунд
-        }
+            if (!CPH.TryGetArg("timeToAdd", out int timeToAdd))
+                timeToAdd = DEFAULT_TIME_TO_ADD;
 
-        // Получаем чёрный список пользователей (если есть)
-        List<string> viewersBlackList = new List<string>();
-        if (CPH.TryGetArg("viewersBlackList", out string tempViewersBlackList))
-        {
-            viewersBlackList = tempViewersBlackList.ToLower().Split(';').ToList();
-        }
-
-        // Проходим по каждому зрителю
-        foreach (var viewer in currentViewers)
-        {
-            string userName = viewer["userName"].ToString().ToLower();
-            string userId = viewer["id"].ToString();
-
-            // Пропускаем пользователя, если он в чёрном списке
-            if (viewersBlackList.Contains(userName))
-            {
-                CPH.LogDebug($"Пользователь {userName} находится в чёрном списке. Пропуск.");
-                continue;
-            }
-
-            // Получаем данные пользователя
+            foreach (var viewer in currentViewers) {
                 
-            var user = GetUserFromArgs(service, userName, userId);
+                string userName = viewer["userName"].ToString().ToLower();
+                string userId = viewer["id"].ToString();
+          
+                var user = GetUserFromArgs(service, userName, userId);
 
-            if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
-                coinsToAdd = 0;
+                if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
+                    coinsToAdd = 0;
 
-            user.Coins = coinsToAdd;
-            user.WatchTime = timeToAdd;
-            DatabaseManager.UpsertUser(user);
+                user.Coins = coinsToAdd;
+                user.WatchTime = timeToAdd;
 
-            CPH.LogDebug($"Добавлено {timeToAdd} секунд для пользователя {userName}.");
-        }
+                DatabaseManager.UpsertUser(user);
+            }
 
         return true;
-    }
-    catch (Exception ex)
-    {
+    } catch (Exception ex) {
         CPH.LogError($"Ошибка в AddWatchTime: {ex}");
         return false;
     }
 }
 
-    private UserData GetUserFromArgs(string service, string userName, string userId)
-    {
-        return new UserData
-        {
+    private UserData GetUserFromArgs(string service, string userName, string ServiceUserId) {
+        
+        return new UserData {
+            
             Service = service,
-            UserId = userId,
+            ServiceUserId = ServiceUserId,
             UserName = userName
         };
     }
 
-    private UserData GetUserFromArgs(string service)
-    {
-        if (!CPH.TryGetArg("userId", out string UserId))
-            CPH.TryGetArg("minichat.Data.UserID", out UserId);
-        return new UserData
-        {
+    private UserData GetUserFromArgs(string service) {
+
+        if (!CPH.TryGetArg("userId", out string ServiceUserId))
+            CPH.TryGetArg("minichat.Data.UserID", out ServiceUserId);
+
+        return new UserData {
+
             Service = service,
-            UserId = UserId,
+            ServiceUserId = ServiceUserId,
             UserName = args["userName"].ToString().ToLower()
+
         };
     }
 
-    private string NormalizeService(string service)
-    {
+    private string NormalizeService() {
+        // TODO: Refactor. Выглядит как говно.
+        if (!CPH.TryGetArg("eventSource", out string service))
+                if (!CPH.TryGetArg("commandSource", out service))
+
+        if (service.Equals("misc")) {
+            if (args.ContainsKey("timerId") && 
+                (args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || 
+                 args["timerName"].ToString().ToLower().Equals("vkvideolive"))) { service = "vkvideolive";
+                 }
+        }
         return service.Equals("vkplay", StringComparison.OrdinalIgnoreCase) ? "vkvideolive" : service.ToLower();
     }
 }
@@ -150,78 +120,76 @@ public class CPHInline
 public class UserData
 {
     public string Service { get; set; }
-    public string UserId { get; set; }
+    public string ServiceUserId { get; set; }
     public string UserName { get; set; }
     public long WatchTime { get; set; }
     public DateTime FollowDate { get; set; }
-    public int MessageCount { get; set; }
-    public int Coins { get; set; }
+    public long MessageCount { get; set; }
+    public long Coins { get; set; }
     public string GameWhenFollow { get; set; }
 }
 
 public static class DatabaseManager
 {
     private static SQLiteConnection _connection;
-    private static readonly string DbPath = "RankSystem.db"; //Задаём путь до базы данных.
+
+    // TODO: Надо что-то придумать с хардкодом пути до базы. Но, на первый взгляд, отсюда не получить аргументы среды выполнения.
+    private static readonly string DbPath = "RankSystem.db";
     private static readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
-    public static void InitializeDatabase()
-    {
+    public static void InitializeDatabase() {
+
         _lock.EnterWriteLock();
-        try
-        {
+
+        try {
+
             _connection = new SQLiteConnection($"Data Source={DbPath};Version=3;");
             _connection.Open();
-            using (var cmd = new SQLiteCommand(_connection))
-            {
+            using (var cmd = new SQLiteCommand(_connection)) {
                 cmd.CommandText = @"
                     PRAGMA journal_mode = WAL;
                     PRAGMA synchronous = NORMAL;
                     
                     CREATE TABLE IF NOT EXISTS Users (
                         Service TEXT NOT NULL,
-                        UserId TEXT NOT NULL,
+                        ServiceUserId TEXT NOT NULL,
                         UserName TEXT NOT NULL,
                         WatchTime LONG DEFAULT 0,
                         FollowDate TEXT NOT NULL,
-                        MessageCount INTEGER DEFAULT 0,
-                        Coins INTEGER DEFAULT 0,
+                        MessageCount LONG DEFAULT 0,
+                        Coins LONG DEFAULT 0,
                         GameWhenFollow TEXT,
-                        PRIMARY KEY (Service, UserId)
+                        PRIMARY KEY (Service, ServiceUserId)
                     );";
                 cmd.ExecuteNonQuery();
             }
-        }
-        catch (Exception ex)
-        {
-        // TODO логгер. Можно подсмотреть у Пликода.
-        }
-        finally
-        {
+        } catch (Exception ex) {
+            // TODO: Добавить логгер. Можно подсмотреть у Пликода.
+        } finally {
             _lock.ExitWriteLock();
         }
     }
 
-    public static void UpsertUser(UserData user)
-    {
+    public static void UpsertUser(UserData user) {
+
         _lock.EnterWriteLock();
-        try
-        {
+
+        try {
             using (var transaction = _connection.BeginTransaction())
-            using (var cmd = new SQLiteCommand(_connection))
-            {
+            using (var cmd = new SQLiteCommand(_connection)) {
+                
                 cmd.CommandText = @"
                     INSERT OR REPLACE INTO Users 
-                    (Service, UserId, UserName, WatchTime, FollowDate, MessageCount, Coins, GameWhenFollow)
+                    (Service, ServiceUserId, UserName, WatchTime, FollowDate, MessageCount, Coins, GameWhenFollow)
                     VALUES (
-                        @Service, @UserId, @UserName, 
-                        COALESCE((SELECT WatchTime FROM Users WHERE Service = @Service AND UserId = @UserId), 0) + @WatchTimeInc,
+                        @Service, @ServiceUserId, @UserName, 
+                        COALESCE((SELECT WatchTime FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId), 0) + @WatchTimeInc,
                         @FollowDate, 
-                        COALESCE((SELECT MessageCount FROM Users WHERE Service = @Service AND UserId = @UserId), 0) + @MessageCountInc,
-                        COALESCE((SELECT Coins FROM Users WHERE Service = @Service AND UserId = @UserId), 0) + @CoinsInc,
-                        COALESCE(@GameWhenFollow, (SELECT GameWhenFollow FROM Users WHERE Service = @Service AND UserId = @UserId))
+                        COALESCE((SELECT MessageCount FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId), 0) + @MessageCountInc,
+                        COALESCE((SELECT Coins FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId), 0) + @CoinsInc,
+                        COALESCE(@GameWhenFollow, (SELECT GameWhenFollow FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId))
                     )";
                 cmd.Parameters.AddWithValue("@Service", user.Service);
-                cmd.Parameters.AddWithValue("@UserId", user.UserId);
+                cmd.Parameters.AddWithValue("@ServiceUserId", user.ServiceUserId);
                 cmd.Parameters.AddWithValue("@UserName", user.UserName);
                 cmd.Parameters.AddWithValue("@WatchTimeInc", user.WatchTime);
                 cmd.Parameters.AddWithValue("@FollowDate", user.FollowDate.ToString("o"));
