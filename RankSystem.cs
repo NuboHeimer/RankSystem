@@ -1,5 +1,5 @@
 ///----------------------------------------------------------------------------
-///   Module:       RankSystemDB
+///   Module:       RankSystem
 ///   Author:       NuboHeimer (https://live.vkvideo.ru/nuboheimer)
 ///   Email:        nuboheimer@yandex.ru
 ///----------------------------------------------------------------------------
@@ -11,17 +11,16 @@ using System.Data.SQLite;
 using System.Linq;
 using System.Threading;
 
-public class CPHInline
-{
-
+public class CPHInline {
     private const int DEFAULT_TIME_TO_ADD = 60; // по умолчанию мы добавляем 60 секунд к времени просмотра.
     public void Init() {
         DatabaseManager.InitializeDatabase();
     }
 
     public bool AddMessageCount() {
+
         try {
-            
+
             string service = NormalizeService();
             var user = GetUserFromArgs(service);
 
@@ -34,14 +33,18 @@ public class CPHInline
             DatabaseManager.UpsertUser(user);
 
             return true;
+
         } catch (Exception ex) {
+
             CPH.LogError($"[RankSystem] AddMessageCount Error: {ex}");
             return false;
+
         }
     }
 
     public bool AddWatchTime() {
         try {
+
             if (!args.ContainsKey("users"))
                 CPH.LogWarn("Список пользователей пуст или отсутствует.");
 
@@ -56,10 +59,10 @@ public class CPHInline
                 timeToAdd = DEFAULT_TIME_TO_ADD;
 
             foreach (var viewer in currentViewers) {
-                
+
                 string userName = viewer["userName"].ToString().ToLower();
                 string userId = viewer["id"].ToString();
-          
+
                 var user = GetUserFromArgs(service, userName, userId);
 
                 if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
@@ -71,24 +74,28 @@ public class CPHInline
                 DatabaseManager.UpsertUser(user);
             }
 
-        return true;
+            return true;
         } catch (Exception ex) {
+
             CPH.LogError($"Ошибка в AddWatchTime: {ex}");
             return false;
+
         }
     }
 
-    public bool AddFollowDate() {
+    public bool AddFollowDate()  {
+
         try {
-            
+
             string service = NormalizeService();
+
             var user = GetUserFromArgs(service);
 
             if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
                 coinsToAdd = 0;
-            
-            if (CPH.TryGetArg("game", out string game)) // записываем категорию стрима, если она есть аргументах.
 
+            if (CPH.TryGetArg("game", out string game)) // записываем категорию стрима, если она есть аргументах.
+                
             user.FollowDate = DateTime.Now;
             user.GameWhenFollow = game;
             user.Coins = coinsToAdd;
@@ -97,22 +104,25 @@ public class CPHInline
 
             return true;
         } catch (Exception ex) {
+
             CPH.LogError($"[RankSystem] AddFollowDate Error: {ex}");
             return false;
+
         }
     }
 
     public bool AddCoins() {
+
         try {
-            
+
             string service = NormalizeService();
+
             var user = GetUserFromArgs(service);
 
             if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
                 coinsToAdd = 0;
 
             user.Coins = coinsToAdd;
-
             DatabaseManager.UpsertUser(user);
 
             return true;
@@ -122,99 +132,167 @@ public class CPHInline
         }
     }
 
-     public bool GetWatchTime()
-    {
-        try
-        {
+    public bool GetWatchTime() {
+
+        try {
+
             string service = NormalizeService();
+
             var user = GetUserFromArgs(service);
+
             var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
-            CPH.SetArgument("watchTime", FormatDateTime(userData?.WatchTime ?? 0));
-            
+
+            var watchTime = userData?.WatchTime ?? 0;
+
+            CPH.SetArgument("watchTime", watchTime);
+
+            string message = "Запрошенная информация не найдена!";
+
+            if (watchTime != 0)
+                message = FormatDateTime(watchTime);
+
+            SendReply(message, service);
+
             return true;
-        }
-        catch (Exception ex)
-        {
+        } catch (Exception ex) {
+
             CPH.LogError($"[RankSystem] GetWatchTime Error: {ex}");
             return false;
+
         }
     }
 
-    public bool GetFollowDate()
-    {
-        try
-        {
+    public bool GetFollowDate() {
+
+        try {
+
             string service = NormalizeService();
+
             var user = GetUserFromArgs(service);
+
             var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
-            CPH.SetArgument("followDate", userData?.FollowDate.ToString("o") ?? string.Empty);
+
+            var followDate = userData?.FollowDate.ToString("o") ?? string.Empty;
+
+            CPH.SetArgument("followDate", followDate);
+
+            string message = "Запрошенная информация не найдена!";
+
+            if (!string.IsNullOrEmpty(followDate))
+                message = followDate;
+
+            SendReply(message, service);
+
+
             return true;
-        }
-        catch (Exception ex)
-        {
+        } catch (Exception ex) {
+
             CPH.LogError($"[RankSystem] GetFollowDate Error: {ex}");
             return false;
+
         }
     }
 
-    public bool GetMessageCount()
-    {
-        try
-        {
+    public bool GetMessageCount() {
+
+        try {
+
             string service = NormalizeService();
+
             var user = GetUserFromArgs(service);
+
             var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
-            CPH.SetArgument("messageCount", userData?.MessageCount ?? 0);
+
+            var messageCount = userData?.MessageCount ?? 0;
+
+            CPH.SetArgument("messageCount", messageCount);
+
+            string message = "Запрошенная информация не найдена!";
+
+            if (messageCount != 0)
+                message = messageCount.ToString();
+
+            SendReply(message, service);
+
             return true;
-        }
-        catch (Exception ex)
-        {
+        } catch (Exception ex) {
+
             CPH.LogError($"[RankSystem] GetMessageCount Error: {ex}");
             return false;
+
         }
     }
 
-    public bool GetCoins()
-    {
-        try
-        {
+    public bool GetCoins() {
+
+        try {
+
             string service = NormalizeService();
+
             var user = GetUserFromArgs(service);
+
             var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
-            CPH.SetArgument("coins", userData?.Coins ?? 0);
+
+            
+            var coins = userData?.Coins ?? 0;
+
+            CPH.SetArgument("coins", coins);
+
+            string message = "Запрошенная информация не найдена!";
+
+            if (coins != 0)
+                message = coins.ToString();
+
+            SendReply(message, service);
             return true;
-        }
-        catch (Exception ex)
-        {
+            
+        } catch (Exception ex) {
+
             CPH.LogError($"[RankSystem] GetCoins Error: {ex}");
             return false;
+
         }
     }
 
-    public bool GetGameWhenFollow()
-    {
-        try
-        {
+    public bool GetGameWhenFollow() {
+
+        try {
+
             string service = NormalizeService();
+
             var user = GetUserFromArgs(service);
+
             var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
-            CPH.SetArgument("gameWhenFollow", userData?.GameWhenFollow ?? string.Empty);
+
+            var gameWhenFollow = userData?.GameWhenFollow ?? string.Empty;
+
+            CPH.SetArgument("gameWhenFollow", gameWhenFollow);
+
+            string message = "Запрошенная информация не найдена!";
+
+            if (!string.IsNullOrEmpty(gameWhenFollow))
+                message = gameWhenFollow;
+
+            SendReply(message, service);
+
             return true;
-        }
-        catch (Exception ex)
-        {
+
+        } catch (Exception ex) {
+
             CPH.LogError($"[RankSystem] GetGameWhenFollow Error: {ex}");
             return false;
+
         }
     }
 
     private UserData GetUserFromArgs(string service, string userName, string ServiceUserId) {
-        
+
         return new UserData {
-            
+
             Service = service,
             ServiceUserId = ServiceUserId,
             UserName = userName
+
         };
     }
 
@@ -233,23 +311,25 @@ public class CPHInline
     }
 
     private string NormalizeService() {
+
         // TODO: Refactor. Выглядит как говно.
         if (!CPH.TryGetArg("eventSource", out string service))
-                if (!CPH.TryGetArg("commandSource", out service))
-
-        if (service.Equals("misc")) {
-            if (args.ContainsKey("timerId") && 
-                (args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || 
-                 args["timerName"].ToString().ToLower().Equals("vkvideolive"))) { service = "vkvideolive";
-                 }
-        }
+            if (!CPH.TryGetArg("commandSource", out service))
+                if (service.Equals("misc"))
+                {
+                    if (args.ContainsKey("timerId") && (args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || args["timerName"].ToString().ToLower().Equals("vkvideolive")))
+                    {
+                        service = "vkvideolive";
+                    }
+                }
 
         if (service.Equals("command"))
             service = args["commandSource"].ToString();
         return service.Equals("vkplay", StringComparison.OrdinalIgnoreCase) ? "vkvideolive" : service.ToLower();
+
     }
 
-        private bool SendReply(string message, string target){
+    private bool SendReply(string message, string target) {
 
         if (target.Equals("twitch"))
             CPH.SendMessage(message);
@@ -259,16 +339,18 @@ public class CPHInline
 
         else if (target.Equals("trovo"))
             CPH.SendTrovoMessage(message);
-        
         else {
+
             CPH.SetArgument("message", message);
             CPH.ExecuteMethod("MiniChat Method Collection", "SendMessageReply");
-        } 
+
+        }
+
         return true;
     }
 
-    public string FormatDateTime(long totalSeconds)
-    {
+    public string FormatDateTime(long totalSeconds) {
+
         // Преобразуем общее количество секунд в годы, месяцы, дни, часы, минуты и секунды.
         int years = 0;
         int months = 0;
@@ -277,81 +359,110 @@ public class CPHInline
         int minutes = (int)((totalSeconds % (60 * 60)) / 60);
         int seconds = (int)(totalSeconds % 60);
 
-        if (days >= 365)
-        {
+        if (days >= 365) {
+
             years = days / 365; // Примерно считаем годы
             days %= 365; // Остаток дней после вычисления лет
+
         }
 
-        if (days >= 30) // Примерно считаем месяцы
-        {
+        if (days >= 30) {
+
             months = days / 30;
             days %= 30; // Остаток дней после вычисления месяцев
+
         }
 
         string result = "";
 
         if (years > 0)
             result += $"{years.ToString()} {GetYearWord(years)} ";
+
         if (months > 0)
             result += $"{months.ToString()} {GetMonthWord(months)} ";
+
         if (days > 0)
             result += $"{days.ToString()} {GetDayWord(days)} ";
+
         if (hours > 0)
             result += $"{hours.ToString()} {GetHourWord(hours)} ";
+
         if (minutes > 0)
             result += $"{minutes.ToString()} {GetMinuteWord(minutes)} ";
+
         if (seconds > 0)
             result += $"{seconds.ToString()} {GetSecondWord(seconds)} ";
 
         return result.Trim(); // Убираем лишние пробелы в конце
     }
 
-    static string GetYearWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11) return "год";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "года";
+    static string GetYearWord(int count) {
+
+        if (count % 10 == 1 && count % 100 != 11)
+            return "год";
+
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "года";
+
         return "лет";
     }
 
-    static string GetMonthWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11) return "месяц";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "месяца";
+    static string GetMonthWord(int count) {
+
+        if (count % 10 == 1 && count % 100 != 11)
+            return "месяц";
+
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "месяца";
+
         return "месяцев";
     }
 
-    static string GetDayWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11) return "день";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "дня";
+    static string GetDayWord(int count) {
+
+        if (count % 10 == 1 && count % 100 != 11)
+            return "день";
+
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "дня";
+
         return "дней";
     }
 
-    static string GetHourWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11) return "час";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "часа";
+    static string GetHourWord(int count) {
+
+        if (count % 10 == 1 && count % 100 != 11)
+            return "час";
+
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "часа";
+
         return "часов";
     }
 
-    static string GetMinuteWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11) return "минуту";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "минуты";
+    static string GetMinuteWord(int count) {
+
+        if (count % 10 == 1 && count % 100 != 11)
+            return "минуту";
+
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "минуты";
+
         return "минут";
     }
 
-    static string GetSecondWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11) return "секунду";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) return "секунды";
+    static string GetSecondWord(int count) {
+        if (count % 10 == 1 && count % 100 != 11)
+            return "секунду";
+
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "секунды";
+
         return "секунд";
     }
 }
 
-public class UserData
-{
+public class UserData {
     public string Service { get; set; }
     public string ServiceUserId { get; set; }
     public string UserName { get; set; }
@@ -362,10 +473,8 @@ public class UserData
     public string GameWhenFollow { get; set; }
 }
 
-public static class DatabaseManager
-{
+public static class DatabaseManager {
     private static SQLiteConnection _connection;
-
     // TODO: Надо что-то придумать с хардкодом пути до базы. Но, на первый взгляд, отсюда не получить аргументы среды выполнения.
     private static readonly string DbPath = "RankSystem.db";
     private static readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
@@ -377,7 +486,9 @@ public static class DatabaseManager
 
             _connection = new SQLiteConnection($"Data Source={DbPath};Version=3;");
             _connection.Open();
+
             using (var cmd = new SQLiteCommand(_connection)) {
+
                 cmd.CommandText = @"
                     PRAGMA journal_mode = WAL;
                     PRAGMA synchronous = NORMAL;
@@ -396,9 +507,11 @@ public static class DatabaseManager
                 cmd.ExecuteNonQuery();
             }
         } catch (Exception ex) {
-            // TODO: Добавить логгер. Можно подсмотреть у Пликода.
+        // TODO: Добавить логгер. Можно подсмотреть у Пликода.
         } finally {
+
             _lock.ExitWriteLock();
+
         }
     }
 
@@ -409,7 +522,7 @@ public static class DatabaseManager
         try {
             using (var transaction = _connection.BeginTransaction())
             using (var cmd = new SQLiteCommand(_connection)) {
-                
+
                 cmd.CommandText = @"
                     INSERT OR REPLACE INTO Users 
                     (Service, ServiceUserId, UserName, WatchTime, FollowDate, MessageCount, Coins, GameWhenFollow)
@@ -432,38 +545,35 @@ public static class DatabaseManager
                 cmd.ExecuteNonQuery();
                 transaction.Commit();
             }
-        }
-        catch (SQLiteException ex)
-        {
+        } catch (SQLiteException ex) {
             throw; // TODO логгер. Можно подсмотреть у Пликода.
-        }
-        finally
-        {
+        } finally {
             _lock.ExitWriteLock();
         }
     }
 
-    public static UserData GetUserData(string service, string serviceUserId)
-    {
+    public static UserData GetUserData(string service, string serviceUserId) {
+
         _lock.EnterReadLock();
-        try
-        {
-            using (var cmd = new SQLiteCommand(_connection))
-            {
+
+        try {
+
+            using (var cmd = new SQLiteCommand(_connection)) {
+
                 cmd.CommandText = @"
                     SELECT * FROM Users 
                     WHERE Service = @Service 
                     AND ServiceUserId = @ServiceUserId";
-                
+
                 cmd.Parameters.AddWithValue("@Service", service);
                 cmd.Parameters.AddWithValue("@ServiceUserId", serviceUserId);
-                
-                using (var reader = cmd.ExecuteReader())
-                {
-                    if (reader.Read())
-                    {
-                        return new UserData
-                        {
+
+                using (var reader = cmd.ExecuteReader()) {
+
+                    if (reader.Read()) {
+
+                        return new UserData {
+
                             Service = reader["Service"].ToString(),
                             ServiceUserId = reader["ServiceUserId"].ToString(),
                             UserName = reader["UserName"].ToString(),
@@ -476,10 +586,9 @@ public static class DatabaseManager
                     }
                 }
             }
+
             return null;
-        }
-        finally
-        {
+        } finally {
             _lock.ExitReadLock();
         }
     }
