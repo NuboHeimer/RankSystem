@@ -97,7 +97,27 @@ public class CPHInline
 
             return true;
         } catch (Exception ex) {
-            CPH.LogError($"[RankSystem] AddMessageCount Error: {ex}");
+            CPH.LogError($"[RankSystem] AddFollowDate Error: {ex}");
+            return false;
+        }
+    }
+
+    public bool AddCoins() {
+        try {
+            
+            string service = NormalizeService();
+            var user = GetUserFromArgs(service);
+
+            if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
+                coinsToAdd = 0;
+
+            user.Coins = coinsToAdd;
+
+            DatabaseManager.UpsertUser(user);
+
+            return true;
+        } catch (Exception ex) {
+            CPH.LogError($"[RankSystem] AddCoins Error: {ex}");
             return false;
         }
     }
