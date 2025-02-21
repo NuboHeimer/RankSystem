@@ -122,6 +122,91 @@ public class CPHInline
         }
     }
 
+     public bool GetWatchTime()
+    {
+        try
+        {
+            string service = NormalizeService();
+            var user = GetUserFromArgs(service);
+            var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
+            CPH.SetArgument("watchTime", userData?.WatchTime ?? 0);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            CPH.LogError($"[RankSystem] GetWatchTime Error: {ex}");
+            return false;
+        }
+    }
+
+    public bool GetFollowDate()
+    {
+        try
+        {
+            string service = NormalizeService();
+            var user = GetUserFromArgs(service);
+            var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
+            CPH.SetArgument("followDate", userData?.FollowDate.ToString("o") ?? string.Empty);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            CPH.LogError($"[RankSystem] GetFollowDate Error: {ex}");
+            return false;
+        }
+    }
+
+    public bool GetMessageCount()
+    {
+        try
+        {
+            string service = NormalizeService();
+            var user = GetUserFromArgs(service);
+            var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
+            CPH.SetArgument("messageCount", userData?.MessageCount ?? 0);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            CPH.LogError($"[RankSystem] GetMessageCount Error: {ex}");
+            return false;
+        }
+    }
+
+    public bool GetCoins()
+    {
+        try
+        {
+            string service = NormalizeService();
+            var user = GetUserFromArgs(service);
+            var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
+            CPH.SetArgument("coins", userData?.Coins ?? 0);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            CPH.LogError($"[RankSystem] GetCoins Error: {ex}");
+            return false;
+        }
+    }
+
+    public bool GetGameWhenFollow()
+    {
+        try
+        {
+            string service = NormalizeService();
+            var user = GetUserFromArgs(service);
+            var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
+            CPH.SetArgument("gameWhenFollow", userData?.GameWhenFollow ?? string.Empty);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            CPH.LogError($"[RankSystem] GetGameWhenFollow Error: {ex}");
+            return false;
+        }
+    }
+
     private UserData GetUserFromArgs(string service, string userName, string ServiceUserId) {
         
         return new UserData {
@@ -157,7 +242,28 @@ public class CPHInline
                  args["timerName"].ToString().ToLower().Equals("vkvideolive"))) { service = "vkvideolive";
                  }
         }
+
+        if (service.Equals("command"))
+            service = args["commandSource"].ToString();
         return service.Equals("vkplay", StringComparison.OrdinalIgnoreCase) ? "vkvideolive" : service.ToLower();
+    }
+
+        private bool SendReply(string message, string target){
+
+        if (target.Equals("twitch"))
+            CPH.SendMessage(message);
+
+        else if (target.Equals("youtube"))
+            CPH.SendYouTubeMessage(message);
+
+        else if (target.Equals("trovo"))
+            CPH.SendTrovoMessage(message);
+        
+        else {
+            CPH.SetArgument("message", message);
+            CPH.ExecuteMethod("MiniChat Method Collection", "SendMessageReply");
+        } 
+        return true;
     }
 }
 
@@ -251,6 +357,47 @@ public static class DatabaseManager
         finally
         {
             _lock.ExitWriteLock();
+        }
+    }
+
+    public static UserData GetUserData(string service, string serviceUserId)
+    {
+        _lock.EnterReadLock();
+        try
+        {
+            using (var cmd = new SQLiteCommand(_connection))
+            {
+                cmd.CommandText = @"
+                    SELECT * FROM Users 
+                    WHERE Service = @Service 
+                    AND ServiceUserId = @ServiceUserId";
+                
+                cmd.Parameters.AddWithValue("@Service", service);
+                cmd.Parameters.AddWithValue("@ServiceUserId", serviceUserId);
+                
+                using (var reader = cmd.ExecuteReader())
+                {
+                    if (reader.Read())
+                    {
+                        return new UserData
+                        {
+                            Service = reader["Service"].ToString(),
+                            ServiceUserId = reader["ServiceUserId"].ToString(),
+                            UserName = reader["UserName"].ToString(),
+                            WatchTime = Convert.ToInt64(reader["WatchTime"]),
+                            FollowDate = DateTime.Parse(reader["FollowDate"].ToString()),
+                            MessageCount = Convert.ToInt64(reader["MessageCount"]),
+                            Coins = Convert.ToInt64(reader["Coins"]),
+                            GameWhenFollow = reader["GameWhenFollow"]?.ToString()
+                        };
+                    }
+                }
+            }
+            return null;
+        }
+        finally
+        {
+            _lock.ExitReadLock();
         }
     }
 }
