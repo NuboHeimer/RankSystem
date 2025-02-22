@@ -4,7 +4,7 @@
 ///   Email:        nuboheimer@yandex.ru
 ///----------------------------------------------------------------------------
  
-///   Version:      0.6.0
+///   Version:      0.6.1
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
@@ -94,7 +94,7 @@ public class CPHInline {
             if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
                 coinsToAdd = 0;
 
-            if (CPH.TryGetArg("game", out string game)) // записываем категорию стрима, если она есть аргументах.
+            if (CPH.TryGetArg("game", out string game)); // записываем категорию стрима, если она есть аргументах.
                 
             user.FollowDate = DateTime.Now;
             user.GameWhenFollow = game;
@@ -328,14 +328,13 @@ public class CPHInline {
 
         // TODO: Refactor. Выглядит как говно.
         if (!CPH.TryGetArg("eventSource", out string service))
-            if (!CPH.TryGetArg("commandSource", out service))
-                if (service.Equals("misc"))
-                {
-                    if (args.ContainsKey("timerId") && (args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || args["timerName"].ToString().ToLower().Equals("vkvideolive")))
-                    {
-                        service = "vkvideolive";
-                    }
-                }
+            if (!CPH.TryGetArg("commandSource", out service));
+
+        if (service.Equals("misc")) {
+            if (args.ContainsKey("timerId") && (args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || args["timerName"].ToString().ToLower().Equals("vkvideolive"))) {
+                return "vkvideolive";
+            }
+        }
 
         if (service.Equals("command"))
             service = args["commandSource"].ToString();
