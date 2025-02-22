@@ -4,7 +4,7 @@
 ///   Email:        nuboheimer@yandex.ru
 ///----------------------------------------------------------------------------
  
-///   Version:      0.4.0
+///   Version:      0.6.1
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
@@ -12,7 +12,7 @@ using System.Linq;
 using System.Threading;
 
 public class CPHInline {
-    private const int DEFAULT_TIME_TO_ADD = 60; // по умолчанию мы добавляем 60 секунд к времени просмотра.
+    private const int DEFAULT_TIME_TO_ADD = 60; // по умолчанию мы добавляем 60 скунд к времени просмотра.
     public void Init() {
         DatabaseManager.InitializeDatabase();
     }
@@ -94,7 +94,7 @@ public class CPHInline {
             if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
                 coinsToAdd = 0;
 
-            if (CPH.TryGetArg("game", out string game)) // записываем категорию стрима, если она есть аргументах.
+            if (CPH.TryGetArg("game", out string game)); // записываем категорию стрима, если она есть аргументах.
                 
             user.FollowDate = DateTime.Now;
             user.GameWhenFollow = game;
@@ -285,6 +285,20 @@ public class CPHInline {
         }
     }
 
+    public bool ClearUsersCoins() {
+
+        List<UserData> users = DatabaseManager.GetUserData();
+
+        foreach(UserData user in users) {
+
+            user.Coins = 0 - user.Coins;
+            DatabaseManager.UpsertUser(user);
+
+        }
+
+        return true;
+    }
+
     private UserData GetUserFromArgs(string service, string userName, string ServiceUserId) {
 
         return new UserData {
@@ -314,14 +328,13 @@ public class CPHInline {
 
         // TODO: Refactor. Выглядит как говно.
         if (!CPH.TryGetArg("eventSource", out string service))
-            if (!CPH.TryGetArg("commandSource", out service))
-                if (service.Equals("misc"))
-                {
-                    if (args.ContainsKey("timerId") && (args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || args["timerName"].ToString().ToLower().Equals("vkvideolive")))
-                    {
-                        service = "vkvideolive";
-                    }
-                }
+            if (!CPH.TryGetArg("commandSource", out service));
+
+        if (service.Equals("misc")) {
+            if (args.ContainsKey("timerId") && (args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || args["timerName"].ToString().ToLower().Equals("vkvideolive"))) {
+                return "vkvideolive";
+            }
+        }
 
         if (service.Equals("command"))
             service = args["commandSource"].ToString();
@@ -463,6 +476,8 @@ public class CPHInline {
 }
 
 public class UserData {
+
+    public string UUID { get; set; }
     public string Service { get; set; }
     public string ServiceUserId { get; set; }
     public string UserName { get; set; }
@@ -494,6 +509,7 @@ public static class DatabaseManager {
                     PRAGMA synchronous = NORMAL;
                     
                     CREATE TABLE IF NOT EXISTS Users (
+                        UUID TEXT NOT NULL,
                         Service TEXT NOT NULL,
                         ServiceUserId TEXT NOT NULL,
                         UserName TEXT NOT NULL,
@@ -525,15 +541,19 @@ public static class DatabaseManager {
 
                 cmd.CommandText = @"
                     INSERT OR REPLACE INTO Users 
-                    (Service, ServiceUserId, UserName, WatchTime, FollowDate, MessageCount, Coins, GameWhenFollow)
+                    (UUID, Service, ServiceUserId, UserName, WatchTime, FollowDate, MessageCount, Coins, GameWhenFollow)
                     VALUES (
-                        @Service, @ServiceUserId, @UserName, 
+                        @UUID, @Service, @ServiceUserId, @UserName, 
                         COALESCE((SELECT WatchTime FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId), 0) + @WatchTimeInc,
                         @FollowDate, 
                         COALESCE((SELECT MessageCount FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId), 0) + @MessageCountInc,
                         COALESCE((SELECT Coins FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId), 0) + @CoinsInc,
                         COALESCE(@GameWhenFollow, (SELECT GameWhenFollow FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId))
                     )";
+                if (string.IsNullOrEmpty(user.UUID))
+                    user.UUID = Guid.NewGuid().ToString();
+                    
+                cmd.Parameters.AddWithValue("@UUID", user.UUID);
                 cmd.Parameters.AddWithValue("@Service", user.Service);
                 cmd.Parameters.AddWithValue("@ServiceUserId", user.ServiceUserId);
                 cmd.Parameters.AddWithValue("@UserName", user.UserName);
@@ -592,4 +612,45 @@ public static class DatabaseManager {
             _lock.ExitReadLock();
         }
     }
+
+        public static List<UserData> GetUserData() {
+            // TODO: Refactor. Тут получается дублирование кода.
+
+            _lock.EnterReadLock();
+
+            List<UserData> users = new List<UserData>();
+
+            try {
+
+                using (var cmd = new SQLiteCommand(_connection)) {
+
+                    cmd.CommandText = @"SELECT * FROM Users";
+
+                    using (var reader = cmd.ExecuteReader()) {
+
+                        while (reader.Read()) {
+
+                            var userData = new UserData {
+
+                                Service = reader["Service"].ToString(),
+                                ServiceUserId = reader["ServiceUserId"].ToString(),
+                                UserName = reader["UserName"].ToString(),
+                                WatchTime = Convert.ToInt64(reader["WatchTime"]),
+                                FollowDate = DateTime.Parse(reader["FollowDate"].ToString()),
+                                MessageCount = Convert.ToInt64(reader["MessageCount"]),
+                                Coins = Convert.ToInt64(reader["Coins"]),
+                                GameWhenFollow = reader["GameWhenFollow"]?.ToString()
+                            };
+
+                            if (userData.Coins > 0)
+                                users.Add(userData);
+                        }
+                    }
+                }
+
+                return users;
+            } finally {
+                _lock.ExitReadLock();
+            }
+        }
 }
