@@ -129,11 +129,19 @@ public class CPHInline
             var user = GetUserFromArgs(service);
             var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
             var watchTime = userData?.WatchTime ?? 0;
-            CPH.SetArgument("watchTime", watchTime);
-            string message = "Запрошенная информация не найдена!";
-            if (watchTime != 0)
-                message = FormatDateTime(watchTime);
-            SendReply(message, service);
+            string formatedWatchTime = FormatDateTime(watchTime);
+
+            if (watchTime == 0)
+            {
+                CPH.SetArgument("defaultReply", "Запрошенная информация не найдена!");
+                CPH.SetArgument("watchTime", "Запрошенная информация не найдена!");
+            }
+            else
+            {
+                CPH.SetArgument("defaultReply", formatedWatchTime);
+                CPH.SetArgument("watchTime", formatedWatchTime);
+            }
+
             return true;
         }
         catch (Exception ex)
@@ -152,10 +160,17 @@ public class CPHInline
             var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
             var followDate = userData?.FollowDate.ToString("o") ?? string.Empty;
             CPH.SetArgument("followDate", followDate);
-            string message = "Запрошенная информация не найдена!";
-            if (!string.IsNullOrEmpty(followDate))
-                message = followDate;
-            SendReply(message, service);
+
+            if (followDate.ToString().Equals("0001-01-01T00:00:00.0000000"))
+            {
+                CPH.SetArgument("defaultReply", "Запрошенная информация не найдена!");
+                CPH.SetArgument("followDate", "Запрошенная информация не найдена!");
+            }
+            else
+            {
+                CPH.SetArgument("defaultReply", followDate);
+                CPH.SetArgument("followDate", followDate);
+            }
             return true;
         }
         catch (Exception ex)
@@ -173,11 +188,18 @@ public class CPHInline
             var user = GetUserFromArgs(service);
             var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
             var messageCount = userData?.MessageCount ?? 0;
-            CPH.SetArgument("messageCount", messageCount);
-            string message = "Запрошенная информация не найдена!";
-            if (messageCount != 0)
-                message = messageCount.ToString();
-            SendReply(message, service);
+
+            if (messageCount == 0)
+            {
+                CPH.SetArgument("defaultReply", "Запрошенная информация не найдена!");
+                CPH.SetArgument("messageCount", "Запрошенная информация не найдена!");
+            }
+            else
+            {
+                CPH.SetArgument("defaultReply", messageCount);
+                CPH.SetArgument("messageCount", messageCount);
+            }
+
             return true;
         }
         catch (Exception ex)
@@ -195,11 +217,18 @@ public class CPHInline
             var user = GetUserFromArgs(service);
             var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
             var coins = userData?.Coins ?? 0;
-            CPH.SetArgument("coins", coins);
-            string message = "Запрошенная информация не найдена!";
-            if (coins != 0)
-                message = coins.ToString();
-            SendReply(message, service);
+
+            if (coins == 0)
+            {
+                CPH.SetArgument("defaultReply", "Запрошенная информация не найдена!");
+                CPH.SetArgument("coins", "Запрошенная информация не найдена!");
+            }
+            else
+            {
+                CPH.SetArgument("defaultReply", coins);
+                CPH.SetArgument("coins", coins);
+            }
+
             return true;
         }
         catch (Exception ex)
@@ -217,11 +246,17 @@ public class CPHInline
             var user = GetUserFromArgs(service);
             var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
             var gameWhenFollow = userData?.GameWhenFollow ?? string.Empty;
-            CPH.SetArgument("gameWhenFollow", gameWhenFollow);
-            string message = "Запрошенная информация не найдена!";
-            if (!string.IsNullOrEmpty(gameWhenFollow))
-                message = gameWhenFollow;
-            SendReply(message, service);
+
+            if (string.IsNullOrEmpty(gameWhenFollow))
+            {
+                CPH.SetArgument("defaultReply", "Запрошенная информация не найдена!");
+                CPH.SetArgument("gameWhenFollow", "Запрошенная информация не найдена!");
+            }
+            else
+            {
+                CPH.SetArgument("defaultReply", gameWhenFollow);
+                CPH.SetArgument("gameWhenFollow", gameWhenFollow);
+            }
             return true;
         }
         catch (Exception ex)
@@ -280,20 +315,28 @@ public class CPHInline
 
         if (service.Equals("command"))
             service = args["commandSource"].ToString();
+
         return service.Equals("vkplay", StringComparison.OrdinalIgnoreCase) ? "vkvideolive" : service.ToLower();
     }
 
-    private bool SendReply(string message, string target)
+    public bool SendReply()
     {
-        if (target.Equals("twitch"))
-            CPH.SendMessage(message);
-        else if (target.Equals("youtube"))
-            CPH.SendYouTubeMessage(message);
-        else if (target.Equals("trovo"))
-            CPH.SendTrovoMessage(message);
+        string service = NormalizeService();
+
+        if (!CPH.TryGetArg("reply", out string reply))
+        {
+            CPH.TryGetArg("defaultReply", out reply);
+        }
+
+        if (service.Equals("twitch"))
+            CPH.SendMessage(reply);
+        else if (service.Equals("youtube"))
+            CPH.SendYouTubeMessage(reply);
+        else if (service.Equals("trovo"))
+            CPH.SendTrovoMessage(reply);
         else
         {
-            CPH.SetArgument("message", message);
+            CPH.SetArgument("message", reply);
             CPH.ExecuteMethod("MiniChat Method Collection", "SendMessageReply");
         }
 
