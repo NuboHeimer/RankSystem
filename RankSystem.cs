@@ -5,7 +5,7 @@
 ///   Help:         https://t.me/nuboheimersb/5
 ///----------------------------------------------------------------------------
 
-///   Version:      0.8.0
+///   Version:      0.9.0
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
@@ -133,12 +133,10 @@ public class CPHInline
 
             if (watchTime == 0)
             {
-                CPH.SetArgument("defaultReply", "Запрошенная информация не найдена!");
-                CPH.SetArgument("watchTime", "Запрошенная информация не найдена!");
+                CPH.SetArgument("watchTime", "Время пользователя не найдено!");
             }
             else
             {
-                CPH.SetArgument("defaultReply", formatedWatchTime);
                 CPH.SetArgument("watchTime", formatedWatchTime);
             }
 
@@ -163,12 +161,10 @@ public class CPHInline
 
             if (followDate.ToString().Equals("0001-01-01T00:00:00.0000000"))
             {
-                CPH.SetArgument("defaultReply", "Запрошенная информация не найдена!");
-                CPH.SetArgument("followDate", "Запрошенная информация не найдена!");
+                CPH.SetArgument("followDate", "Нет информации о дате фоллова!");
             }
             else
             {
-                CPH.SetArgument("defaultReply", followDate);
                 CPH.SetArgument("followDate", followDate);
             }
             return true;
@@ -191,12 +187,10 @@ public class CPHInline
 
             if (messageCount == 0)
             {
-                CPH.SetArgument("defaultReply", "Запрошенная информация не найдена!");
-                CPH.SetArgument("messageCount", "Запрошенная информация не найдена!");
+                CPH.SetArgument("messageCount", "Кажется, пользователь ещё не писал в чат.");
             }
             else
             {
-                CPH.SetArgument("defaultReply", messageCount);
                 CPH.SetArgument("messageCount", messageCount);
             }
 
@@ -218,16 +212,7 @@ public class CPHInline
             var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
             var coins = userData?.Coins ?? 0;
 
-            if (coins == 0)
-            {
-                CPH.SetArgument("defaultReply", "Запрошенная информация не найдена!");
-                CPH.SetArgument("coins", "Запрошенная информация не найдена!");
-            }
-            else
-            {
-                CPH.SetArgument("defaultReply", coins);
-                CPH.SetArgument("coins", coins);
-            }
+            CPH.SetArgument("coins", coins);
 
             return true;
         }
@@ -249,12 +234,10 @@ public class CPHInline
 
             if (string.IsNullOrEmpty(gameWhenFollow))
             {
-                CPH.SetArgument("defaultReply", "Запрошенная информация не найдена!");
-                CPH.SetArgument("gameWhenFollow", "Запрошенная информация не найдена!");
+                CPH.SetArgument("gameWhenFollow", "Информация об игре не найдена!");
             }
             else
             {
-                CPH.SetArgument("defaultReply", gameWhenFollow);
                 CPH.SetArgument("gameWhenFollow", gameWhenFollow);
             }
             return true;
@@ -325,7 +308,7 @@ public class CPHInline
 
         if (!CPH.TryGetArg("reply", out string reply))
         {
-            CPH.TryGetArg("defaultReply", out reply);
+            reply = "Стример забыл настроить ответ на команду!";
         }
 
         if (service.Equals("twitch"))
