@@ -5,7 +5,7 @@
 ///   Help:         https://t.me/nuboheimersb/5
 ///----------------------------------------------------------------------------
 
-///   Version:      0.9.0
+///   Version:      0.9.1
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
@@ -127,7 +127,14 @@ public class CPHInline
         {
             string service = NormalizeService();
             var user = GetUserFromArgs(service);
-            var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
+            var userData = DatabaseManager.GetUserData(
+                filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+                parameters: new[]
+                {
+                     new SQLiteParameter("@Service", user.Service),
+                     new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+                }
+            ).FirstOrDefault();
             var watchTime = userData?.WatchTime ?? 0;
             string formatedWatchTime = FormatDateTime(watchTime);
 
@@ -155,7 +162,14 @@ public class CPHInline
         {
             string service = NormalizeService();
             var user = GetUserFromArgs(service);
-            var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
+            var userData = DatabaseManager.GetUserData(
+                filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+                parameters: new[]
+                {
+                     new SQLiteParameter("@Service", user.Service),
+                     new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+                }
+            ).FirstOrDefault();
             var followDate = userData?.FollowDate.ToString("o") ?? string.Empty;
             CPH.SetArgument("followDate", followDate);
 
@@ -182,7 +196,14 @@ public class CPHInline
         {
             string service = NormalizeService();
             var user = GetUserFromArgs(service);
-            var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
+            var userData = DatabaseManager.GetUserData(
+                filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+                parameters: new[]
+                {
+                     new SQLiteParameter("@Service", user.Service),
+                     new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+                }
+            ).FirstOrDefault();
             var messageCount = userData?.MessageCount ?? 0;
 
             if (messageCount == 0)
@@ -209,7 +230,14 @@ public class CPHInline
         {
             string service = NormalizeService();
             var user = GetUserFromArgs(service);
-            var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
+            var userData = DatabaseManager.GetUserData(
+                filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+                parameters: new[]
+                {
+                     new SQLiteParameter("@Service", user.Service),
+                     new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+                }
+            ).FirstOrDefault();
             var coins = userData?.Coins ?? 0;
 
             CPH.SetArgument("coins", coins);
@@ -229,7 +257,14 @@ public class CPHInline
         {
             string service = NormalizeService();
             var user = GetUserFromArgs(service);
-            var userData = DatabaseManager.GetUserData(user.Service, user.ServiceUserId);
+            var userData = DatabaseManager.GetUserData(
+                filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+                parameters: new[]
+                {
+                     new SQLiteParameter("@Service", user.Service),
+                     new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+                }
+            ).FirstOrDefault();
             var gameWhenFollow = userData?.GameWhenFollow ?? string.Empty;
 
             if (string.IsNullOrEmpty(gameWhenFollow))
@@ -571,57 +606,29 @@ public static class DatabaseManager
             _lock.ExitWriteLock();
         }
     }
-
-    public static UserData GetUserData(string service, string serviceUserId)
+    public static List<UserData> GetUserData(string filter = null, SQLiteParameter[] parameters = null)
     {
         _lock.EnterReadLock();
         try
         {
+            List<UserData> users = new List<UserData>();
             using (var cmd = new SQLiteCommand(_connection))
             {
-                cmd.CommandText = @"
-                    SELECT * FROM Users 
-                    WHERE Service = @Service 
-                    AND ServiceUserId = @ServiceUserId";
-                cmd.Parameters.AddWithValue("@Service", service);
-                cmd.Parameters.AddWithValue("@ServiceUserId", serviceUserId);
-                using (var reader = cmd.ExecuteReader())
-                {
-                    if (reader.Read())
-                    {
-                        return new UserData
-                        {
-                            Service = reader["Service"].ToString(),
-                            ServiceUserId = reader["ServiceUserId"].ToString(),
-                            UserName = reader["UserName"].ToString(),
-                            WatchTime = Convert.ToInt64(reader["WatchTime"]),
-                            FollowDate = DateTime.Parse(reader["FollowDate"].ToString()),
-                            MessageCount = Convert.ToInt64(reader["MessageCount"]),
-                            Coins = Convert.ToInt64(reader["Coins"]),
-                            GameWhenFollow = reader["GameWhenFollow"]?.ToString()
-                        };
-                    }
-                }
-            }
-
-            return null;
-        }
-        finally
-        {
-            _lock.ExitReadLock();
-        }
-    }
-
-    public static List<UserData> GetUserData()
-    {
-        // TODO: Refactor. Тут получается дублирование кода.
-        _lock.EnterReadLock();
-        List<UserData> users = new List<UserData>();
-        try
-        {
-            using (var cmd = new SQLiteCommand(_connection))
-            {
+                // Базовый запрос
                 cmd.CommandText = @"SELECT * FROM Users";
+
+                // Добавляем фильтр если он есть
+                if (!string.IsNullOrEmpty(filter))
+                {
+                    cmd.CommandText += " WHERE " + filter;
+                }
+
+                // Добавляем параметры если они есть
+                if (parameters != null)
+                {
+                    cmd.Parameters.AddRange(parameters);
+                }
+
                 using (var reader = cmd.ExecuteReader())
                 {
                     while (reader.Read())
@@ -637,13 +644,15 @@ public static class DatabaseManager
                             Coins = Convert.ToInt64(reader["Coins"]),
                             GameWhenFollow = reader["GameWhenFollow"]?.ToString()
                         };
-                        if (userData.Coins > 0)
-                            users.Add(userData);
+                        users.Add(userData);
                     }
                 }
             }
-
             return users;
+        }
+        catch (Exception ex)
+        {
+            return new List<UserData>(); // Возвращаем пустой список при ошибке
         }
         finally
         {
