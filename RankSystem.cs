@@ -5,7 +5,7 @@
 ///   Help:         https://t.me/nuboheimersb/5
 ///----------------------------------------------------------------------------
 
-///   Version:      0.9.1
+///   Version:      0.9.2
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
@@ -296,25 +296,22 @@ public class CPHInline
         return true;
     }
 
-    private UserData GetUserFromArgs(string service, string userName, string ServiceUserId)
+    private UserData GetUserFromArgs(string service, string userName = null, string serviceUserId = null)
     {
-        return new UserData
-        {
-            Service = service,
-            ServiceUserId = ServiceUserId,
-            UserName = userName
-        };
-    }
+        // Если ServiceUserId не передан, пытаемся получить из аргументов
+        if (string.IsNullOrEmpty(serviceUserId))
+            if (!CPH.TryGetArg("userId", out serviceUserId))
+                CPH.TryGetArg("minichat.Data.UserID", out serviceUserId);
 
-    private UserData GetUserFromArgs(string service)
-    {
-        if (!CPH.TryGetArg("userId", out string ServiceUserId))
-            CPH.TryGetArg("minichat.Data.UserID", out ServiceUserId);
+        // Если UserName не передан, берем из аргументов
+        if (string.IsNullOrEmpty(userName) && args.ContainsKey("userName"))
+            userName = args["userName"].ToString().ToLower();
+
         return new UserData
         {
             Service = service,
-            ServiceUserId = ServiceUserId,
-            UserName = args["userName"].ToString().ToLower()
+            ServiceUserId = serviceUserId,
+            UserName = userName
         };
     }
 
