@@ -31,7 +31,7 @@ public class CPHInline
         try
         {
             string service = NormalizeService();
-            var user = GetUserFromArgs(service);
+            var user = CreateUserFormArgs(service);
             if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
                 coinsToAdd = 0;
             user.MessageCount = 1;
@@ -62,7 +62,7 @@ public class CPHInline
             {
                 string userName = viewer["userName"].ToString().ToLower();
                 string userId = viewer["id"].ToString();
-                var user = GetUserFromArgs(service, userName, userId);
+                var user = CreateUserFormArgs(service, userName, userId);
                 if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
                     coinsToAdd = 0;
                 user.Coins = coinsToAdd;
@@ -84,7 +84,7 @@ public class CPHInline
         try
         {
             string service = NormalizeService();
-            var user = GetUserFromArgs(service);
+            var user = CreateUserFormArgs(service);
             if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
                 coinsToAdd = 0;
             if (CPH.TryGetArg("game", out string game)) ; // записываем категорию стрима, если она есть аргументах.
@@ -107,7 +107,7 @@ public class CPHInline
         try
         {
             string service = NormalizeService();
-            var user = GetUserFromArgs(service);
+            var user = CreateUserFormArgs(service);
             if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
                 coinsToAdd = 0;
             user.Coins = coinsToAdd;
@@ -126,7 +126,7 @@ public class CPHInline
         try
         {
             string service = NormalizeService();
-            var user = GetUserFromArgs(service);
+            var user = CreateUserFormArgs(service);
             var userData = DatabaseManager.GetUserData(
                 filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
                 parameters: new[]
@@ -161,7 +161,7 @@ public class CPHInline
         try
         {
             string service = NormalizeService();
-            var user = GetUserFromArgs(service);
+            var user = CreateUserFormArgs(service);
             var userData = DatabaseManager.GetUserData(
                 filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
                 parameters: new[]
@@ -195,7 +195,7 @@ public class CPHInline
         try
         {
             string service = NormalizeService();
-            var user = GetUserFromArgs(service);
+            var user = CreateUserFormArgs(service);
             var userData = DatabaseManager.GetUserData(
                 filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
                 parameters: new[]
@@ -229,7 +229,7 @@ public class CPHInline
         try
         {
             string service = NormalizeService();
-            var user = GetUserFromArgs(service);
+            var user = CreateUserFormArgs(service);
             var userData = DatabaseManager.GetUserData(
                 filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
                 parameters: new[]
@@ -256,7 +256,7 @@ public class CPHInline
         try
         {
             string service = NormalizeService();
-            var user = GetUserFromArgs(service);
+            var user = CreateUserFormArgs(service);
             var userData = DatabaseManager.GetUserData(
                 filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
                 parameters: new[]
@@ -296,7 +296,7 @@ public class CPHInline
         return true;
     }
 
-    private UserData GetUserFromArgs(string service, string userName = null, string serviceUserId = null)
+    private UserData CreateUserFormArgs(string service, string userName = null, string serviceUserId = null)
     {
         // Если ServiceUserId не передан, пытаемся получить из аргументов
         if (string.IsNullOrEmpty(serviceUserId))
