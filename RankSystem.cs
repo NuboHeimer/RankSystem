@@ -5,7 +5,7 @@
 ///   Help:         https://t.me/nuboheimersb/5
 ///----------------------------------------------------------------------------
 
-///   Version:      0.9.2
+///   Version:      0.9.3
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
@@ -32,10 +32,22 @@ public class CPHInline
         {
             string service = NormalizeService();
             var user = CreateUserFormArgs(service);
+            var existingUser = DatabaseManager.GetUserData(
+                filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+                parameters: new[]
+                {
+                     new SQLiteParameter("@Service", user.Service),
+                     new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+                }
+            ).FirstOrDefault();
+
+            if (existingUser is not null)
+                user = existingUser;
+
             if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
                 coinsToAdd = 0;
-            user.MessageCount = 1;
-            user.Coins = coinsToAdd;
+            user.MessageCount += 1;
+            user.Coins += coinsToAdd;
             DatabaseManager.UpsertUser(user);
             return true;
         }
@@ -52,21 +64,39 @@ public class CPHInline
         {
             if (!args.ContainsKey("users"))
                 CPH.LogWarn("Список пользователей пуст или отсутствует.");
+
             var currentViewers = (List<Dictionary<string, object>>)args["users"];
+
             if (currentViewers.Count == 0)
                 CPH.LogWarn("Список пользователей пуст.");
+
             string service = NormalizeService();
+
             if (!CPH.TryGetArg("timeToAdd", out int timeToAdd))
                 timeToAdd = DEFAULT_TIME_TO_ADD;
+
             foreach (var viewer in currentViewers)
             {
                 string userName = viewer["userName"].ToString().ToLower();
                 string userId = viewer["id"].ToString();
+
                 var user = CreateUserFormArgs(service, userName, userId);
+
+                var existingUser = DatabaseManager.GetUserData(
+                    filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+                    parameters: new[]
+                    {
+                     new SQLiteParameter("@Service", user.Service),
+                     new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+                    }
+                ).FirstOrDefault();
+
+                if (existingUser is not null)
+                    user = existingUser;
                 if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
                     coinsToAdd = 0;
-                user.Coins = coinsToAdd;
-                user.WatchTime = timeToAdd;
+                user.Coins += coinsToAdd;
+                user.WatchTime += timeToAdd;
                 DatabaseManager.UpsertUser(user);
             }
 
@@ -85,13 +115,24 @@ public class CPHInline
         {
             string service = NormalizeService();
             var user = CreateUserFormArgs(service);
+            var existingUser = DatabaseManager.GetUserData(
+                filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+                parameters: new[]
+                {
+                     new SQLiteParameter("@Service", user.Service),
+                     new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+                }
+            ).FirstOrDefault();
+
+            if (existingUser is not null)
+                user = existingUser;
             if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
                 coinsToAdd = 0;
             if (CPH.TryGetArg("game", out string game)) ; // записываем категорию стрима, если она есть аргументах.
 
             user.FollowDate = DateTime.Now;
             user.GameWhenFollow = game;
-            user.Coins = coinsToAdd;
+            user.Coins += coinsToAdd;
             DatabaseManager.UpsertUser(user);
             return true;
         }
@@ -108,9 +149,20 @@ public class CPHInline
         {
             string service = NormalizeService();
             var user = CreateUserFormArgs(service);
+            var existingUser = DatabaseManager.GetUserData(
+                filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+                parameters: new[]
+                {
+                     new SQLiteParameter("@Service", user.Service),
+                     new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+                }
+            ).FirstOrDefault();
+
+            if (existingUser is not null)
+                user = existingUser;
             if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
                 coinsToAdd = 0;
-            user.Coins = coinsToAdd;
+            user.Coins += coinsToAdd;
             DatabaseManager.UpsertUser(user);
             return true;
         }
@@ -572,12 +624,7 @@ public static class DatabaseManager
                     INSERT OR REPLACE INTO Users 
                     (UUID, Service, ServiceUserId, UserName, WatchTime, FollowDate, MessageCount, Coins, GameWhenFollow)
                     VALUES (
-                        @UUID, @Service, @ServiceUserId, @UserName, 
-                        COALESCE((SELECT WatchTime FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId), 0) + @WatchTimeInc,
-                        @FollowDate, 
-                        COALESCE((SELECT MessageCount FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId), 0) + @MessageCountInc,
-                        COALESCE((SELECT Coins FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId), 0) + @CoinsInc,
-                        COALESCE(@GameWhenFollow, (SELECT GameWhenFollow FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId))
+                        @UUID, @Service, @ServiceUserId, @UserName, @WatchTime, @FollowDate, @MessageCount, @Coins, @GameWhenFollow
                     )";
                 if (string.IsNullOrEmpty(user.UUID))
                     user.UUID = Guid.NewGuid().ToString();
@@ -585,10 +632,10 @@ public static class DatabaseManager
                 cmd.Parameters.AddWithValue("@Service", user.Service);
                 cmd.Parameters.AddWithValue("@ServiceUserId", user.ServiceUserId);
                 cmd.Parameters.AddWithValue("@UserName", user.UserName);
-                cmd.Parameters.AddWithValue("@WatchTimeInc", user.WatchTime);
+                cmd.Parameters.AddWithValue("@WatchTime", user.WatchTime);
                 cmd.Parameters.AddWithValue("@FollowDate", user.FollowDate.ToString("o"));
-                cmd.Parameters.AddWithValue("@MessageCountInc", user.MessageCount);
-                cmd.Parameters.AddWithValue("@CoinsInc", user.Coins);
+                cmd.Parameters.AddWithValue("@MessageCount", user.MessageCount);
+                cmd.Parameters.AddWithValue("@Coins", user.Coins);
                 cmd.Parameters.AddWithValue("@GameWhenFollow", user.GameWhenFollow);
                 cmd.ExecuteNonQuery();
                 transaction.Commit();
@@ -632,6 +679,7 @@ public static class DatabaseManager
                     {
                         var userData = new UserData
                         {
+                            UUID = reader["UUID"].ToString(),
                             Service = reader["Service"].ToString(),
                             ServiceUserId = reader["ServiceUserId"].ToString(),
                             UserName = reader["UserName"].ToString(),
