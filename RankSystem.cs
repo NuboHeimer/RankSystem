@@ -5,7 +5,7 @@
 ///   Help:         https://t.me/nuboheimersb/5
 ///----------------------------------------------------------------------------
 
-///   Version:      0.9.3
+///   Version:      0.9.4
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
@@ -334,6 +334,64 @@ public class CPHInline
             CPH.LogError($"[RankSystem] GetGameWhenFollow Error: {ex}");
             return false;
         }
+    }
+
+    public bool GetTopViewers()
+    {
+        try
+        {
+
+            if (!CPH.TryGetArg("topType", out string topType)) // если не был настроен тип топа
+            {
+                topType = "watchtime"; // задаётся тип по времени просмотра.
+            }
+
+            if (!CPH.TryGetArg("topCount", out int topCount)) // если не было задано количество позиций в топе
+            {
+                topCount = 3; // по умолчанию задаётся три.
+            }
+
+            var (fieldName, displayName) = topType switch
+            {
+                "watchtime" => ("WatchTime", "времени просмотра"),
+                "messagecount" => ("MessageCount", "количеству сообщений"),
+                "coins" => ("Coins", "монетам"),
+                _ => throw new ArgumentException("Неизвестный тип топа")
+            };
+
+            // Получаем топ пользователей
+            var topUsers = DatabaseManager.GetTopUsers(fieldName, topCount);
+
+            if (topUsers.Count == 0)
+            {
+                CPH.SetArgument("reply", "Топ пуст. Никто ещё не набрал статистики.");
+                return true;
+            }
+
+            // Формируем результат
+            var topEntries = topUsers
+                .Select((u, i) => $"{i + 1}. {u.UserName} ({u.Service}) - {FormatValue(u, fieldName)}")
+                .ToList();
+
+            CPH.SetArgument("reply", $"Топ по {displayName}: " + string.Join(", ", topEntries));
+            return true;
+        }
+        catch (Exception ex)
+        {
+            CPH.LogError($"[RankSystem] GetTopViewers Error: {ex}");
+            return false;
+        }
+    }
+
+    private string FormatValue(UserData user, string field)
+    {
+        return field switch
+        {
+            "WatchTime" => FormatDateTime(user.WatchTime),
+            "MessageCount" => $"{user.MessageCount} сообщ.",
+            "Coins" => $"{user.Coins} монет",
+            _ => "0"
+        };
     }
 
     public bool ClearUsersCoins()
@@ -703,5 +761,21 @@ public static class DatabaseManager
         {
             _lock.ExitReadLock();
         }
+    }
+
+    public static List<UserData> GetTopUsers(string topType, int limit)
+    {
+        string orderBy = topType.ToLower() switch
+        {
+            "watchtime" => "WatchTime DESC",
+            "messagecount" => "MessageCount DESC",
+            "coins" => "Coins DESC",
+            _ => throw new ArgumentException("Invalid topType")
+        };
+
+        return GetUserData(
+            filter: $"{topType} > 0 ORDER BY {orderBy} LIMIT @limit",
+            parameters: new[] { new SQLiteParameter("@limit", limit) }
+        );
     }
 }
