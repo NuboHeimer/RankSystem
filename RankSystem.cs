@@ -5,7 +5,7 @@
 ///   Help:         https://t.me/nuboheimersb/5
 ///----------------------------------------------------------------------------
 
-///   Version:      0.9.4
+///   Version:      0.10.0
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
