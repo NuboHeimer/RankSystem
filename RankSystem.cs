@@ -5,7 +5,6 @@
 ///   Help:         https://t.me/nuboheimersb/5
 ///----------------------------------------------------------------------------
 
-
 ///   Version:      0.10.0
 
 using System;
@@ -569,7 +568,7 @@ public class UserData
     public string ServiceUserId { get; set; }
     public string UserName { get; set; }
     public long WatchTime { get; set; }
-    public DateTime FollowDate { get; set; }
+    public DateTime FollowDate { get; set; } = DateTime.MinValue;
     public long MessageCount { get; set; }
     public long Coins { get; set; }
     public string GameWhenFollow { get; set; }
@@ -577,41 +576,51 @@ public class UserData
 
 public static class DatabaseManager
 {
-    private static SQLiteConnection _connection;
     // TODO: Надо что-то придумать с хардкодом пути до базы. Но, на первый взгляд, отсюда не получить аргументы среды выполнения.
     private static readonly string DbPath = "RankSystem.db";
     private static readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
+    private static SQLiteConnection CreateConnection()
+    {
+        var connection = new SQLiteConnection($"Data Source={DbPath};Version=3;");
+        connection.Open();
+        return connection;
+    }
     public static void InitializeDatabase()
     {
         _lock.EnterWriteLock();
         try
         {
-            _connection = new SQLiteConnection($"Data Source={DbPath};Version=3;");
-            _connection.Open();
-            using (var cmd = new SQLiteCommand(_connection))
+            using (var connection = CreateConnection())
             {
-                cmd.CommandText = @"
+                connection.Open();
+                using (var cmd = new SQLiteCommand(connection))
+                {
+                    cmd.CommandText = @"
                     PRAGMA journal_mode = WAL;
                     PRAGMA synchronous = NORMAL;
-                    
                     CREATE TABLE IF NOT EXISTS Users (
                         UUID TEXT NOT NULL,
                         Service TEXT NOT NULL,
                         ServiceUserId TEXT NOT NULL,
                         UserName TEXT NOT NULL,
-                        WatchTime LONG DEFAULT 0,
+                        WatchTime INTEGER DEFAULT 0,
                         FollowDate TEXT NOT NULL,
-                        MessageCount LONG DEFAULT 0,
-                        Coins LONG DEFAULT 0,
+                        MessageCount INTEGER DEFAULT 0,
+                        Coins INTEGER DEFAULT 0,
                         GameWhenFollow TEXT,
                         PRIMARY KEY (Service, ServiceUserId)
+                    );
+                    CREATE TABLE IF NOT EXISTS UserNameHistory (
+                        Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        UUID TEXT NOT NULL,
+                        OldUserName TEXT,
+                        NewUserName TEXT,
+                        ChangeDate TEXT NOT NULL,
+                        FOREIGN KEY (UUID) REFERENCES Users(UUID)
                     );";
-                cmd.ExecuteNonQuery();
+                    cmd.ExecuteNonQuery();
+                }
             }
-        }
-        catch (Exception ex)
-        {
-            // TODO: Добавить логгер. Можно подсмотреть у Пликода.
         }
         finally
         {
@@ -624,47 +633,20 @@ public static class DatabaseManager
         _lock.EnterWriteLock();
         try
         {
-            _connection = new SQLiteConnection($"Data Source={DbPath};Version=3;");
-            _connection.Open();
-            using (var cmd = new SQLiteCommand(_connection))
+            using (var connection = CreateConnection())
             {
-                // Удаляем таблицы если существуют
-                cmd.CommandText = @"
-                DROP TABLE IF EXISTS UserNameHistory;
-                DROP TABLE IF EXISTS Users;";
-                cmd.ExecuteNonQuery();
-                // Пересоздаем таблицы с нуля
-                cmd.CommandText = @"
-                PRAGMA journal_mode = WAL;
-                PRAGMA synchronous = NORMAL;
-                
-                CREATE TABLE Users (
-                    UUID TEXT NOT NULL,
-                    Service TEXT NOT NULL,
-                    ServiceUserId TEXT NOT NULL,
-                    UserName TEXT NOT NULL,
-                    WatchTime LONG DEFAULT 0,
-                    FollowDate TEXT NOT NULL,
-                    MessageCount LONG DEFAULT 0,
-                    Coins LONG DEFAULT 0,
-                    GameWhenFollow TEXT,
-                    PRIMARY KEY (Service, ServiceUserId)
-                );
-
-                CREATE TABLE UserNameHistory (
-                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    UUID TEXT NOT NULL,
-                    OldUserName TEXT,
-                    NewUserName TEXT,
-                    ChangeDate TEXT NOT NULL,
-                    FOREIGN KEY (UUID) REFERENCES Users(UUID)
-                );";
-                cmd.ExecuteNonQuery();
+                connection.Open();
+                using (var cmd = new SQLiteCommand(connection))
+                {
+                    cmd.CommandText = @"
+                    PRAGMA writable_schema = 1;
+                    DELETE FROM sqlite_master WHERE type IN ('table', 'index', 'trigger');
+                    PRAGMA writable_schema = 0;
+                    VACUUM;";
+                    cmd.ExecuteNonQuery();
+                }
             }
-        }
-        catch (Exception ex)
-        {
-            //CPH.LogError($"[InitializeDB] Error: {ex}");
+            InitializeDatabase();
         }
         finally
         {
@@ -677,33 +659,47 @@ public static class DatabaseManager
         _lock.EnterWriteLock();
         try
         {
-            using (var transaction = _connection.BeginTransaction())
-            using (var cmd = new SQLiteCommand(_connection))
+            using (var connection = CreateConnection())
             {
-                cmd.CommandText = @"
-                    INSERT OR REPLACE INTO Users 
-                    (UUID, Service, ServiceUserId, UserName, WatchTime, FollowDate, MessageCount, Coins, GameWhenFollow)
-                    VALUES (
-                        @UUID, @Service, @ServiceUserId, @UserName, @WatchTime, @FollowDate, @MessageCount, @Coins, @GameWhenFollow
-                    )";
-                if (string.IsNullOrEmpty(user.UUID))
-                    user.UUID = Guid.NewGuid().ToString();
-                cmd.Parameters.AddWithValue("@UUID", user.UUID);
-                cmd.Parameters.AddWithValue("@Service", user.Service);
-                cmd.Parameters.AddWithValue("@ServiceUserId", user.ServiceUserId);
-                cmd.Parameters.AddWithValue("@UserName", user.UserName);
-                cmd.Parameters.AddWithValue("@WatchTime", user.WatchTime);
-                cmd.Parameters.AddWithValue("@FollowDate", user.FollowDate.ToString("o"));
-                cmd.Parameters.AddWithValue("@MessageCount", user.MessageCount);
-                cmd.Parameters.AddWithValue("@Coins", user.Coins);
-                cmd.Parameters.AddWithValue("@GameWhenFollow", user.GameWhenFollow);
-                cmd.ExecuteNonQuery();
-                transaction.Commit();
+                connection.Open();
+                using (var transaction = connection.BeginTransaction())
+                {
+                    try
+                    {
+                        using (var cmd = new SQLiteCommand(connection))
+                        {
+                            cmd.Transaction = transaction;
+                            cmd.CommandText = @"
+                            INSERT OR REPLACE INTO Users 
+                            (UUID, Service, ServiceUserId, UserName, WatchTime, FollowDate, MessageCount, Coins, GameWhenFollow)
+                            VALUES (
+                                @UUID, @Service, @ServiceUserId, @UserName, @WatchTime, @FollowDate, @MessageCount, @Coins, @GameWhenFollow
+                            )";
+
+                            if (string.IsNullOrEmpty(user.UUID))
+                                user.UUID = Guid.NewGuid().ToString();
+
+                            cmd.Parameters.AddWithValue("@UUID", user.UUID);
+                            cmd.Parameters.AddWithValue("@Service", user.Service);
+                            cmd.Parameters.AddWithValue("@ServiceUserId", user.ServiceUserId);
+                            cmd.Parameters.AddWithValue("@UserName", user.UserName);
+                            cmd.Parameters.AddWithValue("@WatchTime", user.WatchTime);
+                            cmd.Parameters.AddWithValue("@FollowDate", user.FollowDate.ToString("o"));
+                            cmd.Parameters.AddWithValue("@MessageCount", user.MessageCount);
+                            cmd.Parameters.AddWithValue("@Coins", user.Coins);
+                            cmd.Parameters.AddWithValue("@GameWhenFollow", user.GameWhenFollow ?? (object)DBNull.Value);
+
+                            cmd.ExecuteNonQuery();
+                        }
+                        transaction.Commit();
+                    }
+                    catch
+                    {
+                        transaction.Rollback();
+                        throw;
+                    }
+                }
             }
-        }
-        catch (SQLiteException ex)
-        {
-            throw; // TODO логгер. Можно подсмотреть у Пликода.
         }
         finally
         {
@@ -715,49 +711,41 @@ public static class DatabaseManager
         _lock.EnterReadLock();
         try
         {
-            List<UserData> users = new List<UserData>();
-            using (var cmd = new SQLiteCommand(_connection))
+            using (var connection = CreateConnection())
             {
-                // Базовый запрос
-                cmd.CommandText = @"SELECT * FROM Users";
-
-                // Добавляем фильтр если он есть
-                if (!string.IsNullOrEmpty(filter))
+                connection.Open();
+                using (var cmd = new SQLiteCommand(connection))
                 {
-                    cmd.CommandText += " WHERE " + filter;
-                }
+                    cmd.CommandText = "SELECT * FROM Users";
+                    
+                    if (!string.IsNullOrEmpty(filter))
+                        cmd.CommandText += " WHERE " + filter;
+                    
+                    if (parameters != null)
+                        cmd.Parameters.AddRange(parameters);
 
-                // Добавляем параметры если они есть
-                if (parameters != null)
-                {
-                    cmd.Parameters.AddRange(parameters);
-                }
-
-                using (var reader = cmd.ExecuteReader())
-                {
-                    while (reader.Read())
+                    using (var reader = cmd.ExecuteReader())
                     {
-                        var userData = new UserData
+                        var users = new List<UserData>();
+                        while (reader.Read())
                         {
-                            UUID = reader["UUID"].ToString(),
-                            Service = reader["Service"].ToString(),
-                            ServiceUserId = reader["ServiceUserId"].ToString(),
-                            UserName = reader["UserName"].ToString(),
-                            WatchTime = Convert.ToInt64(reader["WatchTime"]),
-                            FollowDate = DateTime.Parse(reader["FollowDate"].ToString()),
-                            MessageCount = Convert.ToInt64(reader["MessageCount"]),
-                            Coins = Convert.ToInt64(reader["Coins"]),
-                            GameWhenFollow = reader["GameWhenFollow"]?.ToString()
-                        };
-                        users.Add(userData);
+                            users.Add(new UserData
+                            {
+                                UUID = reader["UUID"].ToString(),
+                                Service = reader["Service"].ToString(),
+                                ServiceUserId = reader["ServiceUserId"].ToString(),
+                                UserName = reader["UserName"].ToString(),
+                                WatchTime = Convert.ToInt64(reader["WatchTime"]),
+                                FollowDate = DateTime.Parse(reader["FollowDate"].ToString()),
+                                MessageCount = Convert.ToInt64(reader["MessageCount"]),
+                                Coins = Convert.ToInt64(reader["Coins"]),
+                                GameWhenFollow = reader["GameWhenFollow"] as string
+                            });
+                        }
+                        return users;
                     }
                 }
             }
-            return users;
-        }
-        catch (Exception ex)
-        {
-            return new List<UserData>(); // Возвращаем пустой список при ошибке
         }
         finally
         {
