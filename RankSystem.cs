@@ -32,6 +32,7 @@ public class CPHInline
         try
         {
             string service = NormalizeService();
+            // TODO: кажется, ниже можно сразу передавать userName.
             var user = CreateUserFormArgs(service);
             var existingUser = DatabaseManager.GetUserData(
                 filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
@@ -64,12 +65,18 @@ public class CPHInline
         try
         {
             if (!args.ContainsKey("users"))
+            {
                 CPH.LogWarn("Список пользователей пуст или отсутствует.");
+                return false;
+            }
 
             var currentViewers = (List<Dictionary<string, object>>)args["users"];
 
             if (currentViewers.Count == 0)
+            {
                 CPH.LogWarn("Список пользователей пуст.");
+                return false;            
+            }
 
             string service = NormalizeService();
 
