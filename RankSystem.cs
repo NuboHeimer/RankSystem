@@ -5,7 +5,7 @@
 ///   Help:         https://t.me/nuboheimersb/5
 ///----------------------------------------------------------------------------
 
-///   Version:      0.10.0
+///   Version:      0.10.1
 
 using System;
 using System.Collections.Generic;
@@ -582,7 +582,6 @@ public static class DatabaseManager
     private static SQLiteConnection CreateConnection()
     {
         var connection = new SQLiteConnection($"Data Source={DbPath};Version=3;");
-        connection.Open();
         return connection;
     }
     public static void InitializeDatabase()
@@ -639,19 +638,21 @@ public static class DatabaseManager
                 using (var cmd = new SQLiteCommand(connection))
                 {
                     cmd.CommandText = @"
-                    PRAGMA writable_schema = 1;
-                    DELETE FROM sqlite_master WHERE type IN ('table', 'index', 'trigger');
-                    PRAGMA writable_schema = 0;
-                    VACUUM;";
+                PRAGMA writable_schema = 1;
+                DELETE FROM sqlite_master WHERE type IN ('table', 'index', 'trigger');
+                PRAGMA writable_schema = 0;
+                VACUUM;";
                     cmd.ExecuteNonQuery();
                 }
             }
-            InitializeDatabase();
+            // Инициализация теперь выполняется вне блокировки
         }
         finally
         {
             _lock.ExitWriteLock();
         }
+        // Реинициализация БД после освобождения блокировки
+        InitializeDatabase();
     }
 
     public static void UpsertUser(UserData user)
@@ -717,10 +718,10 @@ public static class DatabaseManager
                 using (var cmd = new SQLiteCommand(connection))
                 {
                     cmd.CommandText = "SELECT * FROM Users";
-                    
+
                     if (!string.IsNullOrEmpty(filter))
                         cmd.CommandText += " WHERE " + filter;
-                    
+
                     if (parameters != null)
                         cmd.Parameters.AddRange(parameters);
 
