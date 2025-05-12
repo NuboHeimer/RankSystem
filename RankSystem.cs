@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using System.Data.SQLite;
 using System.Linq;
 using System.Threading;
+using System.Data;
 
 public class CPHInline
 {
@@ -32,8 +33,15 @@ public class CPHInline
         try
         {
             string service = NormalizeService();
-            // TODO: кажется, ниже можно сразу передавать userName.
             var user = CreateUserFormArgs(service);
+            
+            // Дополнительная проверка - если у пользователя не инициализированы критичные поля, логируем и прерываем операцию
+            if (string.IsNullOrEmpty(user.Service) || string.IsNullOrEmpty(user.ServiceUserId))
+            {
+                CPH.LogError($"[RankSystem] Critical user data missing. Service: {user.Service}, ServiceUserId: {user.ServiceUserId}");
+                return false;
+            }
+            
             var existingUser = DatabaseManager.GetUserData(
                 filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
                 parameters: new[]
@@ -44,12 +52,20 @@ public class CPHInline
             ).FirstOrDefault();
 
             if (existingUser is not null)
+            {
                 user = existingUser;
+                user.MessageCount += 1; // Увеличиваем только для отслеживания в UpsertUser
+            }
+            else
+            {
+                user.MessageCount = 1;
+            }
 
-            if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
+            if (!CPH.TryGetArg("coinsToAdd", out long coinsToAdd))
                 coinsToAdd = 0;
-            user.MessageCount += 1;
-            user.Coins += coinsToAdd;
+                
+            user.Coins += coinsToAdd; // Только добавляем дельту, UpsertUser корректно обработает
+            
             DatabaseManager.UpsertUser(user);
             return true;
         }
@@ -418,12 +434,32 @@ public class CPHInline
     {
         // Если ServiceUserId не передан, пытаемся получить из аргументов
         if (string.IsNullOrEmpty(serviceUserId))
+        {
             if (!CPH.TryGetArg("userId", out serviceUserId))
+            {
                 CPH.TryGetArg("minichat.Data.UserID", out serviceUserId);
+            }
+        }
+
+        // Если serviceUserId все еще null или пустая строка, создаем временный ID
+        if (string.IsNullOrEmpty(serviceUserId))
+        {
+            CPH.LogWarn($"[RankSystem] ServiceUserId is NULL or empty for service {service}. Using temporary ID.");
+            // Создаем временный ID на основе имени пользователя или текущего времени
+            serviceUserId = $"temp_{(string.IsNullOrEmpty(userName) ? DateTime.Now.Ticks.ToString() : userName)}";
+        }
 
         // Если UserName не передан, берем из аргументов
         if (string.IsNullOrEmpty(userName) && args.ContainsKey("userName"))
+        {
             userName = args["userName"].ToString().ToLower();
+        }
+
+        // Если userName все еще null, используем временное имя
+        if (string.IsNullOrEmpty(userName))
+        {
+            userName = $"user_{serviceUserId}";
+        }
 
         return new UserData
         {
@@ -604,6 +640,10 @@ public static class DatabaseManager
                     cmd.CommandText = @"
                     PRAGMA journal_mode = WAL;
                     PRAGMA synchronous = NORMAL;
+                    PRAGMA busy_timeout = 5000;
+                    PRAGMA cache_size = -2000;
+                    PRAGMA temp_store = MEMORY;
+                    PRAGMA wal_autocheckpoint = 1000;
                     CREATE TABLE IF NOT EXISTS Users (
                         UUID TEXT NOT NULL,
                         Service TEXT NOT NULL,
@@ -664,6 +704,36 @@ public static class DatabaseManager
 
     public static void UpsertUser(UserData user)
     {
+        // Определим, является ли это добавлением сообщения
+        bool isMessageIncrement = false;
+        long coinsToAdd = 0;
+        
+        // Получаем данные о пользователе ДО входа в блокировку записи
+        var existingUser = GetUserData(
+            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+            parameters: new[]
+            {
+                new SQLiteParameter("@Service", user.Service),
+                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+            }
+        ).FirstOrDefault();
+
+        // Расчет дельты для инкрементов
+        if (existingUser != null)
+        {
+            if (user.MessageCount > existingUser.MessageCount)
+            {
+                isMessageIncrement = true;
+            }
+            
+            coinsToAdd = user.Coins - existingUser.Coins;
+        }
+        else
+        {
+            // Новый пользователь
+            coinsToAdd = user.Coins;
+        }
+        
         _lock.EnterWriteLock();
         try
         {
@@ -677,27 +747,68 @@ public static class DatabaseManager
                         using (var cmd = new SQLiteCommand(connection))
                         {
                             cmd.Transaction = transaction;
-                            cmd.CommandText = @"
-                            INSERT OR REPLACE INTO Users 
-                            (UUID, Service, ServiceUserId, UserName, WatchTime, FollowDate, MessageCount, Coins, GameWhenFollow)
-                            VALUES (
-                                @UUID, @Service, @ServiceUserId, @UserName, @WatchTime, @FollowDate, @MessageCount, @Coins, @GameWhenFollow
-                            )";
+                            
+                            if (existingUser != null)
+                            {
+                                // Обновление существующего пользователя - используем атомарные обновления
+                                string updateQuery = @"
+                                UPDATE Users 
+                                SET UserName = @UserName,
+                                    WatchTime = @WatchTime,
+                                    Coins = Coins + @CoinsToAdd";
+                                
+                                if (isMessageIncrement)
+                                {
+                                    updateQuery += ", MessageCount = MessageCount + 1";
+                                }
+                                
+                                if (user.FollowDate > DateTime.MinValue)
+                                {
+                                    updateQuery += ", FollowDate = @FollowDate, GameWhenFollow = @GameWhenFollow";
+                                }
+                                
+                                updateQuery += " WHERE Service = @Service AND ServiceUserId = @ServiceUserId";
+                                
+                                cmd.CommandText = updateQuery;
+                                cmd.Parameters.AddWithValue("@Service", user.Service);
+                                cmd.Parameters.AddWithValue("@ServiceUserId", user.ServiceUserId);
+                                cmd.Parameters.AddWithValue("@UserName", user.UserName);
+                                cmd.Parameters.AddWithValue("@WatchTime", user.WatchTime);
+                                cmd.Parameters.AddWithValue("@CoinsToAdd", coinsToAdd);
+                                
+                                if (user.FollowDate > DateTime.MinValue)
+                                {
+                                    cmd.Parameters.AddWithValue("@FollowDate", user.FollowDate.ToString("o"));
+                                    cmd.Parameters.AddWithValue("@GameWhenFollow", user.GameWhenFollow ?? (object)DBNull.Value);
+                                }
+                                
+                                cmd.ExecuteNonQuery();
+                            }
+                            else
+                            {
+                                // Вставка нового пользователя
+                                cmd.CommandText = @"
+                                INSERT INTO Users 
+                                (UUID, Service, ServiceUserId, UserName, WatchTime, FollowDate, MessageCount, Coins, GameWhenFollow)
+                                VALUES (
+                                    @UUID, @Service, @ServiceUserId, @UserName, @WatchTime, @FollowDate, @MessageCount, @Coins, @GameWhenFollow
+                                )";
 
-                            if (string.IsNullOrEmpty(user.UUID))
-                                user.UUID = Guid.NewGuid().ToString();
+                                if (string.IsNullOrEmpty(user.UUID))
+                                    user.UUID = Guid.NewGuid().ToString();
 
-                            cmd.Parameters.AddWithValue("@UUID", user.UUID);
-                            cmd.Parameters.AddWithValue("@Service", user.Service);
-                            cmd.Parameters.AddWithValue("@ServiceUserId", user.ServiceUserId);
-                            cmd.Parameters.AddWithValue("@UserName", user.UserName);
-                            cmd.Parameters.AddWithValue("@WatchTime", user.WatchTime);
-                            cmd.Parameters.AddWithValue("@FollowDate", user.FollowDate.ToString("o"));
-                            cmd.Parameters.AddWithValue("@MessageCount", user.MessageCount);
-                            cmd.Parameters.AddWithValue("@Coins", user.Coins);
-                            cmd.Parameters.AddWithValue("@GameWhenFollow", user.GameWhenFollow ?? (object)DBNull.Value);
+                                cmd.Parameters.AddWithValue("@UUID", user.UUID);
+                                cmd.Parameters.AddWithValue("@Service", user.Service);
+                                cmd.Parameters.AddWithValue("@ServiceUserId", user.ServiceUserId);
+                                cmd.Parameters.AddWithValue("@UserName", user.UserName);
+                                cmd.Parameters.AddWithValue("@WatchTime", user.WatchTime);
+                                cmd.Parameters.AddWithValue("@FollowDate", user.FollowDate.ToString("o"));
+                                cmd.Parameters.AddWithValue("@MessageCount", user.MessageCount);
+                                cmd.Parameters.AddWithValue("@Coins", user.Coins);
+                                cmd.Parameters.AddWithValue("@GameWhenFollow", user.GameWhenFollow ?? (object)DBNull.Value);
 
-                            cmd.ExecuteNonQuery();
+                                cmd.ExecuteNonQuery();
+                            }
                         }
                         transaction.Commit();
                     }
