@@ -256,6 +256,29 @@ public class CPHInline
         }
     }
 
+    public bool CheckCoinsForAction()
+    {
+        try
+        {
+            long userCoins = long.Parse(args["coins"].ToString());
+            CPH.SetArgument("userCoins", userCoins);
+            long actionCurrency = long.Parse(args["actionCurrency"].ToString());
+            if (userCoins < actionCurrency)
+            {
+                return false;
+            }
+            else
+            {
+                return true;
+            }
+        }
+        catch (Exception ex)
+        {
+            CPH.LogError($"[RankSystem] GetCoins Error: {ex}");
+            return false;
+        }
+    }
+
     public bool GetGameWhenFollow()
     {
         try
