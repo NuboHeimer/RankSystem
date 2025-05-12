@@ -4,9 +4,8 @@
 ///   Email:        nuboheimer@yandex.ru
 ///   Help:         https://t.me/nuboheimersb/5
 ///----------------------------------------------------------------------------
-
+ 
 ///   Version:      0.10.1
-
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
@@ -17,6 +16,8 @@ using System.Data;
 public class CPHInline
 {
     private const int DEFAULT_TIME_TO_ADD = 60; // по умолчанию мы добавляем 60 скунд к времени просмотра.
+    private const long DEFAULT_COINS_TO_ADD = 0; // по умолчанию мы добавляем 0 монет.
+    private const int DEFAULT_TOP_COUNT = 3; // по умолчанию задаётся 3 позиции в топе.
     public void Init()
     {
         DatabaseManager.InitializeDatabase();
@@ -34,27 +35,17 @@ public class CPHInline
         {
             string service = NormalizeService();
             var user = CreateUserFormArgs(service);
-            
-            // Дополнительная проверка - если у пользователя не инициализированы критичные поля, логируем и прерываем операцию
             if (string.IsNullOrEmpty(user.Service) || string.IsNullOrEmpty(user.ServiceUserId))
             {
-                CPH.LogError($"[RankSystem] Critical user data missing. Service: {user.Service}, ServiceUserId: {user.ServiceUserId}");
+                CPH.LogError($"[RankSystem][AddMessageCount] Critical user data missing. Service: {user.Service}, ServiceUserId: {user.ServiceUserId}");
                 return false;
             }
-            
-            var existingUser = DatabaseManager.GetUserData(
-                filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-                parameters: new[]
-                {
-                     new SQLiteParameter("@Service", user.Service),
-                     new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-                }
-            ).FirstOrDefault();
 
+            var existingUser = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
             if (existingUser is not null)
             {
                 user = existingUser;
-                user.MessageCount += 1; // Увеличиваем только для отслеживания в UpsertUser
+                user.MessageCount += 1;
             }
             else
             {
@@ -62,16 +53,14 @@ public class CPHInline
             }
 
             if (!CPH.TryGetArg("coinsToAdd", out long coinsToAdd))
-                coinsToAdd = 0;
-                
-            user.Coins += coinsToAdd; // Только добавляем дельту, UpsertUser корректно обработает
-            
+                coinsToAdd = DEFAULT_COINS_TO_ADD;
+            user.Coins += coinsToAdd;
             DatabaseManager.UpsertUser(user);
             return true;
         }
         catch (Exception ex)
         {
-            CPH.LogError($"[RankSystem] AddMessageCount Error: {ex}");
+            CPH.LogError($"[RankSystem][AddMessageCount] Error: {ex}");
             return false;
         }
     }
@@ -82,43 +71,30 @@ public class CPHInline
         {
             if (!args.ContainsKey("users"))
             {
-                CPH.LogWarn("Список пользователей пуст или отсутствует.");
+                CPH.LogWarn("[RankSystem][AddWatchTime] Список пользователей пуст или отсутствует.");
                 return false;
             }
 
             var currentViewers = (List<Dictionary<string, object>>)args["users"];
-
             if (currentViewers.Count == 0)
             {
-                CPH.LogWarn("Список пользователей пуст.");
-                return false;            
+                CPH.LogWarn("[RankSystem][AddWatchTime] Список пользователей пуст.");
+                return false;
             }
 
             string service = NormalizeService();
-
             if (!CPH.TryGetArg("timeToAdd", out int timeToAdd))
                 timeToAdd = DEFAULT_TIME_TO_ADD;
-
             foreach (var viewer in currentViewers)
             {
                 string userName = viewer["userName"].ToString().ToLower();
                 string userId = viewer["id"].ToString();
-
                 var user = CreateUserFormArgs(service, userName, userId);
-
-                var existingUser = DatabaseManager.GetUserData(
-                    filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-                    parameters: new[]
-                    {
-                     new SQLiteParameter("@Service", user.Service),
-                     new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-                    }
-                ).FirstOrDefault();
-
+                var existingUser = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
                 if (existingUser is not null)
                     user = existingUser;
-                if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
-                    coinsToAdd = 0;
+                if (!CPH.TryGetArg("coinsToAdd", out long coinsToAdd))
+                    coinsToAdd = DEFAULT_COINS_TO_ADD;
                 user.Coins += coinsToAdd;
                 user.WatchTime += timeToAdd;
                 DatabaseManager.UpsertUser(user);
@@ -139,23 +115,14 @@ public class CPHInline
         {
             string service = NormalizeService();
             var user = CreateUserFormArgs(service);
-            var existingUser = DatabaseManager.GetUserData(
-                filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-                parameters: new[]
-                {
-                     new SQLiteParameter("@Service", user.Service),
-                     new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-                }
-            ).FirstOrDefault();
-
+            var existingUser = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
             if (existingUser is not null)
                 user = existingUser;
-            if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
-                coinsToAdd = 0;
-            if (CPH.TryGetArg("game", out string game)) ; // записываем категорию стрима, если она есть аргументах.
-
+            if (!CPH.TryGetArg("coinsToAdd", out long coinsToAdd))
+                coinsToAdd = DEFAULT_COINS_TO_ADD;
+            if (CPH.TryGetArg("game", out string game))
+                user.GameWhenFollow = game; // записываем категорию стрима, если она есть аргументах.
             user.FollowDate = DateTime.Now;
-            user.GameWhenFollow = game;
             user.Coins += coinsToAdd;
             DatabaseManager.UpsertUser(user);
             return true;
@@ -173,19 +140,11 @@ public class CPHInline
         {
             string service = NormalizeService();
             var user = CreateUserFormArgs(service);
-            var existingUser = DatabaseManager.GetUserData(
-                filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-                parameters: new[]
-                {
-                     new SQLiteParameter("@Service", user.Service),
-                     new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-                }
-            ).FirstOrDefault();
-
+            var existingUser = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
             if (existingUser is not null)
                 user = existingUser;
-            if (!CPH.TryGetArg("coinsToAdd", out int coinsToAdd))
-                coinsToAdd = 0;
+            if (!CPH.TryGetArg("coinsToAdd", out long coinsToAdd))
+                coinsToAdd = DEFAULT_COINS_TO_ADD;
             user.Coins += coinsToAdd;
             DatabaseManager.UpsertUser(user);
             return true;
@@ -203,17 +162,9 @@ public class CPHInline
         {
             string service = NormalizeService();
             var user = CreateUserFormArgs(service);
-            var userData = DatabaseManager.GetUserData(
-                filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-                parameters: new[]
-                {
-                     new SQLiteParameter("@Service", user.Service),
-                     new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-                }
-            ).FirstOrDefault();
+            var userData = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
             var watchTime = userData?.WatchTime ?? 0;
             string formatedWatchTime = FormatDateTime(watchTime);
-
             if (watchTime == 0)
             {
                 CPH.SetArgument("watchTime", "Время пользователя не найдено!");
@@ -238,17 +189,9 @@ public class CPHInline
         {
             string service = NormalizeService();
             var user = CreateUserFormArgs(service);
-            var userData = DatabaseManager.GetUserData(
-                filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-                parameters: new[]
-                {
-                     new SQLiteParameter("@Service", user.Service),
-                     new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-                }
-            ).FirstOrDefault();
+            var userData = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
             var followDate = userData?.FollowDate.ToString("o") ?? string.Empty;
             CPH.SetArgument("followDate", followDate);
-
             if (followDate.ToString().Equals("0001-01-01T00:00:00.0000000"))
             {
                 CPH.SetArgument("followDate", "Нет информации о дате фоллова!");
@@ -257,6 +200,7 @@ public class CPHInline
             {
                 CPH.SetArgument("followDate", followDate);
             }
+
             return true;
         }
         catch (Exception ex)
@@ -272,16 +216,8 @@ public class CPHInline
         {
             string service = NormalizeService();
             var user = CreateUserFormArgs(service);
-            var userData = DatabaseManager.GetUserData(
-                filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-                parameters: new[]
-                {
-                     new SQLiteParameter("@Service", user.Service),
-                     new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-                }
-            ).FirstOrDefault();
+            var userData = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
             var messageCount = userData?.MessageCount ?? 0;
-
             if (messageCount == 0)
             {
                 CPH.SetArgument("messageCount", "Кажется, пользователь ещё не писал в чат.");
@@ -306,18 +242,9 @@ public class CPHInline
         {
             string service = NormalizeService();
             var user = CreateUserFormArgs(service);
-            var userData = DatabaseManager.GetUserData(
-                filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-                parameters: new[]
-                {
-                     new SQLiteParameter("@Service", user.Service),
-                     new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-                }
-            ).FirstOrDefault();
+            var userData = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
             var coins = userData?.Coins ?? 0;
-
             CPH.SetArgument("coins", coins);
-
             return true;
         }
         catch (Exception ex)
@@ -333,16 +260,8 @@ public class CPHInline
         {
             string service = NormalizeService();
             var user = CreateUserFormArgs(service);
-            var userData = DatabaseManager.GetUserData(
-                filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-                parameters: new[]
-                {
-                     new SQLiteParameter("@Service", user.Service),
-                     new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-                }
-            ).FirstOrDefault();
+            var userData = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
             var gameWhenFollow = userData?.GameWhenFollow ?? string.Empty;
-
             if (string.IsNullOrEmpty(gameWhenFollow))
             {
                 CPH.SetArgument("gameWhenFollow", "Информация об игре не найдена!");
@@ -351,6 +270,7 @@ public class CPHInline
             {
                 CPH.SetArgument("gameWhenFollow", gameWhenFollow);
             }
+
             return true;
         }
         catch (Exception ex)
@@ -364,39 +284,30 @@ public class CPHInline
     {
         try
         {
-
-            if (!CPH.TryGetArg("topType", out string topType)) // если не был настроен тип топа
+            if (!CPH.TryGetArg("topType", out string topType))
             {
-                topType = "watchtime"; // задаётся тип по времени просмотра.
+                topType = "watchtime";
             }
 
-            if (!CPH.TryGetArg("topCount", out int topCount)) // если не было задано количество позиций в топе
+            if (!CPH.TryGetArg("topCount", out int topCount))
             {
-                topCount = 3; // по умолчанию задаётся три.
+                topCount = 3;
             }
 
-            var (fieldName, displayName) = topType switch
+            var(fieldName, displayName) = topType switch
             {
                 "watchtime" => ("WatchTime", "времени просмотра"),
                 "messagecount" => ("MessageCount", "количеству сообщений"),
                 "coins" => ("Coins", "монетам"),
-                _ => throw new ArgumentException("Неизвестный тип топа")
-            };
-
-            // Получаем топ пользователей
+                _ => throw new ArgumentException("Неизвестный тип топа")};
             var topUsers = DatabaseManager.GetTopUsers(fieldName, topCount);
-
             if (topUsers.Count == 0)
             {
                 CPH.SetArgument("reply", "Топ пуст. Никто ещё не набрал статистики.");
                 return true;
             }
 
-            // Формируем результат
-            var topEntries = topUsers
-                .Select((u, i) => $"{i + 1}. {u.UserName} ({u.Service}) - {FormatValue(u, fieldName)}")
-                .ToList();
-
+            var topEntries = topUsers.Select((u, i) => $"{i + 1}. {u.UserName} ({u.Service}) - {FormatValue(u, fieldName)}").ToList();
             CPH.SetArgument("reply", $"Топ по {displayName}: " + string.Join(", ", topEntries));
             return true;
         }
@@ -432,7 +343,6 @@ public class CPHInline
 
     private UserData CreateUserFormArgs(string service, string userName = null, string serviceUserId = null)
     {
-        // Если ServiceUserId не передан, пытаемся получить из аргументов
         if (string.IsNullOrEmpty(serviceUserId))
         {
             if (!CPH.TryGetArg("userId", out serviceUserId))
@@ -474,11 +384,7 @@ public class CPHInline
         // TODO: Refactor. Выглядит как говно.
         if (!CPH.TryGetArg("eventSource", out string service))
             if (!CPH.TryGetArg("commandSource", out service))
-            {
-            return false;
-
-            };
-
+                ;
         if (service.Equals("misc"))
         {
             if (args.ContainsKey("timerId") && (args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || args["timerName"].ToString().ToLower().Equals("vkvideolive")))
@@ -489,14 +395,12 @@ public class CPHInline
 
         if (service.Equals("command"))
             service = args["commandSource"].ToString();
-
         return service.Equals("vkplay", StringComparison.OrdinalIgnoreCase) ? "vkvideolive" : service.ToLower();
     }
 
     public bool SendReply()
     {
         string service = NormalizeService();
-
         if (!CPH.TryGetArg("reply", out string reply))
         {
             reply = "Стример забыл настроить ответ на команду!";
@@ -632,6 +536,7 @@ public static class DatabaseManager
         var connection = new SQLiteConnection($"Data Source={DbPath};Version=3;");
         return connection;
     }
+
     public static void InitializeDatabase()
     {
         _lock.EnterWriteLock();
@@ -697,12 +602,13 @@ public static class DatabaseManager
                     cmd.ExecuteNonQuery();
                 }
             }
-            // Инициализация теперь выполняется вне блокировки
+        // Инициализация теперь выполняется вне блокировки
         }
         finally
         {
             _lock.ExitWriteLock();
         }
+
         // Реинициализация БД после освобождения блокировки
         InitializeDatabase();
     }
@@ -712,17 +618,8 @@ public static class DatabaseManager
         // Определим, является ли это добавлением сообщения
         bool isMessageIncrement = false;
         long coinsToAdd = 0;
-        
         // Получаем данные о пользователе ДО входа в блокировку записи
-        var existingUser = GetUserData(
-            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-            parameters: new[]
-            {
-                new SQLiteParameter("@Service", user.Service),
-                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-            }
-        ).FirstOrDefault();
-
+        var existingUser = GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
         // Расчет дельты для инкрементов
         if (existingUser != null)
         {
@@ -730,7 +627,7 @@ public static class DatabaseManager
             {
                 isMessageIncrement = true;
             }
-            
+
             coinsToAdd = user.Coins - existingUser.Coins;
         }
         else
@@ -738,7 +635,7 @@ public static class DatabaseManager
             // Новый пользователь
             coinsToAdd = user.Coins;
         }
-        
+
         _lock.EnterWriteLock();
         try
         {
@@ -752,7 +649,6 @@ public static class DatabaseManager
                         using (var cmd = new SQLiteCommand(connection))
                         {
                             cmd.Transaction = transaction;
-                            
                             if (existingUser != null)
                             {
                                 // Обновление существующего пользователя - используем атомарные обновления
@@ -761,32 +657,29 @@ public static class DatabaseManager
                                 SET UserName = @UserName,
                                     WatchTime = @WatchTime,
                                     Coins = Coins + @CoinsToAdd";
-                                
                                 if (isMessageIncrement)
                                 {
                                     updateQuery += ", MessageCount = MessageCount + 1";
                                 }
-                                
+
                                 if (user.FollowDate > DateTime.MinValue)
                                 {
                                     updateQuery += ", FollowDate = @FollowDate, GameWhenFollow = @GameWhenFollow";
                                 }
-                                
+
                                 updateQuery += " WHERE Service = @Service AND ServiceUserId = @ServiceUserId";
-                                
                                 cmd.CommandText = updateQuery;
                                 cmd.Parameters.AddWithValue("@Service", user.Service);
                                 cmd.Parameters.AddWithValue("@ServiceUserId", user.ServiceUserId);
                                 cmd.Parameters.AddWithValue("@UserName", user.UserName);
                                 cmd.Parameters.AddWithValue("@WatchTime", user.WatchTime);
                                 cmd.Parameters.AddWithValue("@CoinsToAdd", coinsToAdd);
-                                
                                 if (user.FollowDate > DateTime.MinValue)
                                 {
                                     cmd.Parameters.AddWithValue("@FollowDate", user.FollowDate.ToString("o"));
                                     cmd.Parameters.AddWithValue("@GameWhenFollow", user.GameWhenFollow ?? (object)DBNull.Value);
                                 }
-                                
+
                                 cmd.ExecuteNonQuery();
                             }
                             else
@@ -798,10 +691,8 @@ public static class DatabaseManager
                                 VALUES (
                                     @UUID, @Service, @ServiceUserId, @UserName, @WatchTime, @FollowDate, @MessageCount, @Coins, @GameWhenFollow
                                 )";
-
                                 if (string.IsNullOrEmpty(user.UUID))
                                     user.UUID = Guid.NewGuid().ToString();
-
                                 cmd.Parameters.AddWithValue("@UUID", user.UUID);
                                 cmd.Parameters.AddWithValue("@Service", user.Service);
                                 cmd.Parameters.AddWithValue("@ServiceUserId", user.ServiceUserId);
@@ -811,10 +702,10 @@ public static class DatabaseManager
                                 cmd.Parameters.AddWithValue("@MessageCount", user.MessageCount);
                                 cmd.Parameters.AddWithValue("@Coins", user.Coins);
                                 cmd.Parameters.AddWithValue("@GameWhenFollow", user.GameWhenFollow ?? (object)DBNull.Value);
-
                                 cmd.ExecuteNonQuery();
                             }
                         }
+
                         transaction.Commit();
                     }
                     catch
@@ -830,6 +721,7 @@ public static class DatabaseManager
             _lock.ExitWriteLock();
         }
     }
+
     public static List<UserData> GetUserData(string filter = null, SQLiteParameter[] parameters = null)
     {
         _lock.EnterReadLock();
@@ -841,31 +733,18 @@ public static class DatabaseManager
                 using (var cmd = new SQLiteCommand(connection))
                 {
                     cmd.CommandText = "SELECT * FROM Users";
-
                     if (!string.IsNullOrEmpty(filter))
                         cmd.CommandText += " WHERE " + filter;
-
                     if (parameters != null)
                         cmd.Parameters.AddRange(parameters);
-
                     using (var reader = cmd.ExecuteReader())
                     {
                         var users = new List<UserData>();
                         while (reader.Read())
                         {
-                            users.Add(new UserData
-                            {
-                                UUID = reader["UUID"].ToString(),
-                                Service = reader["Service"].ToString(),
-                                ServiceUserId = reader["ServiceUserId"].ToString(),
-                                UserName = reader["UserName"].ToString(),
-                                WatchTime = Convert.ToInt64(reader["WatchTime"]),
-                                FollowDate = DateTime.Parse(reader["FollowDate"].ToString()),
-                                MessageCount = Convert.ToInt64(reader["MessageCount"]),
-                                Coins = Convert.ToInt64(reader["Coins"]),
-                                GameWhenFollow = reader["GameWhenFollow"] as string
-                            });
+                            users.Add(new UserData { UUID = reader["UUID"].ToString(), Service = reader["Service"].ToString(), ServiceUserId = reader["ServiceUserId"].ToString(), UserName = reader["UserName"].ToString(), WatchTime = Convert.ToInt64(reader["WatchTime"]), FollowDate = DateTime.Parse(reader["FollowDate"].ToString()), MessageCount = Convert.ToInt64(reader["MessageCount"]), Coins = Convert.ToInt64(reader["Coins"]), GameWhenFollow = reader["GameWhenFollow"] as string });
                         }
+
                         return users;
                     }
                 }
@@ -884,12 +763,7 @@ public static class DatabaseManager
             "watchtime" => "WatchTime DESC",
             "messagecount" => "MessageCount DESC",
             "coins" => "Coins DESC",
-            _ => throw new ArgumentException("Invalid topType")
-        };
-
-        return GetUserData(
-            filter: $"{topType} > 0 ORDER BY {orderBy} LIMIT @limit",
-            parameters: new[] { new SQLiteParameter("@limit", limit) }
-        );
+            _ => throw new ArgumentException("Invalid topType")};
+        return GetUserData(filter: $"{topType} > 0 ORDER BY {orderBy} LIMIT @limit", parameters: new[] { new SQLiteParameter("@limit", limit) });
     }
 }
