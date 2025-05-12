@@ -4,8 +4,9 @@
 ///   Email:        nuboheimer@yandex.ru
 ///   Help:         https://t.me/nuboheimersb/5
 ///----------------------------------------------------------------------------
- 
+
 ///   Version:      0.10.1
+
 using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
@@ -294,12 +295,13 @@ public class CPHInline
                 topCount = 3;
             }
 
-            var(fieldName, displayName) = topType switch
+            var (fieldName, displayName) = topType switch
             {
                 "watchtime" => ("WatchTime", "времени просмотра"),
                 "messagecount" => ("MessageCount", "количеству сообщений"),
                 "coins" => ("Coins", "монетам"),
-                _ => throw new ArgumentException("Неизвестный тип топа")};
+                _ => throw new ArgumentException("Неизвестный тип топа")
+            };
             var topUsers = DatabaseManager.GetTopUsers(fieldName, topCount);
             if (topUsers.Count == 0)
             {
@@ -602,7 +604,7 @@ public static class DatabaseManager
                     cmd.ExecuteNonQuery();
                 }
             }
-        // Инициализация теперь выполняется вне блокировки
+            // Инициализация теперь выполняется вне блокировки
         }
         finally
         {
@@ -763,7 +765,8 @@ public static class DatabaseManager
             "watchtime" => "WatchTime DESC",
             "messagecount" => "MessageCount DESC",
             "coins" => "Coins DESC",
-            _ => throw new ArgumentException("Invalid topType")};
+            _ => throw new ArgumentException("Invalid topType")
+        };
         return GetUserData(filter: $"{topType} > 0 ORDER BY {orderBy} LIMIT @limit", parameters: new[] { new SQLiteParameter("@limit", limit) });
     }
 }
