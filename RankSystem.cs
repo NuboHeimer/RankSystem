@@ -473,7 +473,12 @@ public class CPHInline
     {
         // TODO: Refactor. Выглядит как говно.
         if (!CPH.TryGetArg("eventSource", out string service))
-            if (!CPH.TryGetArg("commandSource", out service)) ;
+            if (!CPH.TryGetArg("commandSource", out service))
+            {
+            return false;
+
+            };
+
         if (service.Equals("misc"))
         {
             if (args.ContainsKey("timerId") && (args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || args["timerName"].ToString().ToLower().Equals("vkvideolive")))
