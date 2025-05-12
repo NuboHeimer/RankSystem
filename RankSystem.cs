@@ -13,6 +13,7 @@ using System.Data.SQLite;
 using System.Linq;
 using System.Threading;
 using System.Data;
+using System.Text;
 
 public class CPHInline
 {
@@ -528,6 +529,15 @@ public class UserData
     public string GameWhenFollow { get; set; }
 }
 
+public class UserNameHistory
+{
+    public long Id { get; set; }
+    public string UUID { get; set; }
+    public string OldUserName { get; set; }
+    public string NewUserName { get; set; }
+    public DateTime ChangeDate { get; set; }
+}
+
 public static class DatabaseManager
 {
     // TODO: Надо что-то придумать с хардкодом пути до базы. Но, на первый взгляд, отсюда не получить аргументы среды выполнения.
@@ -653,6 +663,13 @@ public static class DatabaseManager
                             cmd.Transaction = transaction;
                             if (existingUser != null)
                             {
+                                // Проверяем, изменился ли никнейм
+                                if (!string.Equals(existingUser.UserName, user.UserName, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    // Добавляем запись в историю
+                                    AddUserNameHistory(existingUser.UUID, existingUser.UserName, user.UserName);
+                                }
+
                                 // Обновление существующего пользователя - используем атомарные обновления
                                 string updateQuery = @"
                                 UPDATE Users 
@@ -768,5 +785,76 @@ public static class DatabaseManager
             _ => throw new ArgumentException("Invalid topType")
         };
         return GetUserData(filter: $"{topType} > 0 ORDER BY {orderBy} LIMIT @limit", parameters: new[] { new SQLiteParameter("@limit", limit) });
+    }
+
+    public static void AddUserNameHistory(string uuid, string oldUserName, string newUserName)
+    {
+        _lock.EnterWriteLock();
+        try
+        {
+            using (var connection = CreateConnection())
+            {
+                connection.Open();
+                using (var cmd = new SQLiteCommand(connection))
+                {
+                    cmd.CommandText = @"
+                    INSERT INTO UserNameHistory (UUID, OldUserName, NewUserName, ChangeDate)
+                    VALUES (@UUID, @OldUserName, @NewUserName, @ChangeDate)";
+
+                    cmd.Parameters.AddWithValue("@UUID", uuid);
+                    cmd.Parameters.AddWithValue("@OldUserName", oldUserName);
+                    cmd.Parameters.AddWithValue("@NewUserName", newUserName);
+                    cmd.Parameters.AddWithValue("@ChangeDate", DateTime.Now.ToString("o"));
+
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }
+        finally
+        {
+            _lock.ExitWriteLock();
+        }
+    }
+
+    public static List<UserNameHistory> GetUserNameHistory(string uuid)
+    {
+        _lock.EnterReadLock();
+        try
+        {
+            using (var connection = CreateConnection())
+            {
+                connection.Open();
+                using (var cmd = new SQLiteCommand(connection))
+                {
+                    cmd.CommandText = @"
+                    SELECT * FROM UserNameHistory 
+                    WHERE UUID = @UUID 
+                    ORDER BY ChangeDate DESC";
+
+                    cmd.Parameters.AddWithValue("@UUID", uuid);
+
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        var history = new List<UserNameHistory>();
+                        while (reader.Read())
+                        {
+                            history.Add(new UserNameHistory
+                            {
+                                Id = Convert.ToInt64(reader["Id"]),
+                                UUID = reader["UUID"].ToString(),
+                                OldUserName = reader["OldUserName"].ToString(),
+                                NewUserName = reader["NewUserName"].ToString(),
+                                ChangeDate = DateTime.Parse(reader["ChangeDate"].ToString())
+                            });
+                        }
+                        return history;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            _lock.ExitReadLock();
+        }
     }
 }
