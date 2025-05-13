@@ -136,7 +136,7 @@ public class CPHInline
         }
     }
 
-    public bool AddCoins()
+    public bool AddCoins(long? coinsToAdd = null)
     {
         try
         {
@@ -145,9 +145,10 @@ public class CPHInline
             var existingUser = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
             if (existingUser is not null)
                 user = existingUser;
-            if (!CPH.TryGetArg("coinsToAdd", out long coinsToAdd))
-                coinsToAdd = DEFAULT_COINS_TO_ADD;
-            user.Coins += coinsToAdd;
+            long coinsFromArgs = DEFAULT_COINS_TO_ADD;
+            if (!coinsToAdd.HasValue && !CPH.TryGetArg("coinsToAdd", out coinsFromArgs))
+                coinsFromArgs = DEFAULT_COINS_TO_ADD;
+            user.Coins += coinsToAdd ?? coinsFromArgs;
             DatabaseManager.UpsertUser(user);
             return true;
         }
@@ -260,12 +261,22 @@ public class CPHInline
     {
         try
         {
-            long userCoins = long.Parse(args["coins"].ToString());
-            CPH.SetArgument("userCoins", userCoins);
-            long actionCurrency = long.Parse(args["actionCurrency"].ToString());
-            if (userCoins < actionCurrency)
+            if (args["eventSource"].ToString().Equals("command"))
             {
-                return false;
+
+                long userCoins = long.Parse(args["coins"].ToString());
+                CPH.SetArgument("userCoins", userCoins);
+                long actionCurrency = long.Parse(args["actionCurrency"].ToString());
+                if (userCoins < actionCurrency)
+                {
+                    SendReply();
+                    return false;
+                }
+                else
+                {
+                    AddCoins(-actionCurrency);
+                    return true;
+                }
             }
             else
             {
@@ -588,7 +599,10 @@ public static class DatabaseManager
                     PRAGMA busy_timeout = 5000;
                     PRAGMA cache_size = -2000;
                     PRAGMA temp_store = MEMORY;
-                    PRAGMA wal_autocheckpoint = 1000;
+                    PRAGMA wal_autocheckpoint = 1000;";
+                    cmd.ExecuteNonQuery();
+
+                    cmd.CommandText = @"
                     CREATE TABLE IF NOT EXISTS Users (
                         UUID TEXT NOT NULL,
                         Service TEXT NOT NULL,
@@ -600,7 +614,10 @@ public static class DatabaseManager
                         Coins INTEGER DEFAULT 0,
                         GameWhenFollow TEXT,
                         PRIMARY KEY (Service, ServiceUserId)
-                    );
+                    );";
+                    cmd.ExecuteNonQuery();
+
+                    cmd.CommandText = @"
                     CREATE TABLE IF NOT EXISTS UserNameHistory (
                         Id INTEGER PRIMARY KEY AUTOINCREMENT,
                         UUID TEXT NOT NULL,
@@ -610,6 +627,72 @@ public static class DatabaseManager
                         FOREIGN KEY (UUID) REFERENCES Users(UUID)
                     );";
                     cmd.ExecuteNonQuery();
+
+                    // Check and add missing columns in Users table
+                    var expectedColumns = new Dictionary<string, string>
+                    {
+                        { "UUID", "TEXT NOT NULL" },
+                        { "Service", "TEXT NOT NULL" },
+                        { "ServiceUserId", "TEXT NOT NULL" },
+                        { "UserName", "TEXT NOT NULL" },
+                        { "WatchTime", "INTEGER DEFAULT 0" },
+                        { "FollowDate", "TEXT NOT NULL" },
+                        { "MessageCount", "INTEGER DEFAULT 0" },
+                        { "Coins", "INTEGER DEFAULT 0" },
+                        { "GameWhenFollow", "TEXT" }
+                    };
+
+                    // Get existing columns
+                    cmd.CommandText = "PRAGMA table_info(Users);";
+                    var existingColumns = new HashSet<string>();
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            existingColumns.Add(reader["name"].ToString());
+                        }
+                    }
+
+                    // Add missing columns
+                    foreach (var column in expectedColumns)
+                    {
+                        if (!existingColumns.Contains(column.Key))
+                        {
+                            cmd.CommandText = $"ALTER TABLE Users ADD COLUMN {column.Key} {column.Value};";
+                            cmd.ExecuteNonQuery();
+                        }
+                    }
+
+                    // Check and add missing columns in UserNameHistory table
+                    expectedColumns = new Dictionary<string, string>
+                    {
+                        { "Id", "INTEGER PRIMARY KEY AUTOINCREMENT" },
+                        { "UUID", "TEXT NOT NULL" },
+                        { "OldUserName", "TEXT" },
+                        { "NewUserName", "TEXT" },
+                        { "ChangeDate", "TEXT NOT NULL" }
+                    };
+
+                    // Get existing columns
+                    cmd.CommandText = "PRAGMA table_info(UserNameHistory);";
+                    existingColumns.Clear();
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            existingColumns.Add(reader["name"].ToString());
+                        }
+                    }
+
+                    // Add missing columns
+                    foreach (var column in expectedColumns)
+                    {
+                        if (!existingColumns.Contains(column.Key))
+                        {
+                            cmd.CommandText = $"ALTER TABLE UserNameHistory ADD COLUMN {column.Key} {column.Value};";
+                            cmd.ExecuteNonQuery();
+                        }
+                    }
                 }
             }
         }
@@ -637,14 +720,12 @@ public static class DatabaseManager
                     cmd.ExecuteNonQuery();
                 }
             }
-            // Инициализация теперь выполняется вне блокировки
         }
         finally
         {
             _lock.ExitWriteLock();
         }
 
-        // Реинициализация БД после освобождения блокировки
         InitializeDatabase();
     }
 
