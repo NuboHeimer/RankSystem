@@ -124,7 +124,9 @@ public class CPHInline
                 coinsToAdd = DEFAULT_COINS_TO_ADD;
             if (CPH.TryGetArg("game", out string game))
                 user.GameWhenFollow = game; // записываем категорию стрима, если она есть аргументах.
-            user.FollowDate = DateTime.Now;
+            if (!CPH.TryGetArg("minichat.Data.Date", out DateTime followDate))
+                followDate = DateTime.Now;
+            user.FollowDate = followDate;
             user.Coins += coinsToAdd;
             DatabaseManager.UpsertUser(user);
             return true;
