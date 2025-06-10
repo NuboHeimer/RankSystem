@@ -20,6 +20,7 @@ public class CPHInline
     private const int DEFAULT_TIME_TO_ADD = 60; // по умолчанию мы добавляем 60 скунд к времени просмотра.
     private const long DEFAULT_COINS_TO_ADD = 0; // по умолчанию мы добавляем 0 монет.
     private const int DEFAULT_TOP_COUNT = 3; // по умолчанию задаётся 3 позиции в топе.
+
     public void Init()
     {
         DatabaseManager.InitializeDatabase();
@@ -35,7 +36,7 @@ public class CPHInline
     {
         try
         {
-            string service = NormalizeService();
+            string service = RankSystemInternal.NormalizeService(this);
             var user = CreateUserFormArgs(service);
             if (string.IsNullOrEmpty(user.Service) || string.IsNullOrEmpty(user.ServiceUserId))
             {
@@ -84,7 +85,7 @@ public class CPHInline
                 return false;
             }
 
-            string service = NormalizeService();
+            string service = RankSystemInternal.NormalizeService(this);
             if (!CPH.TryGetArg("timeToAdd", out int timeToAdd))
                 timeToAdd = DEFAULT_TIME_TO_ADD;
             foreach (var viewer in currentViewers)
@@ -115,7 +116,7 @@ public class CPHInline
     {
         try
         {
-            string service = NormalizeService();
+            string service = RankSystemInternal.NormalizeService(this);
             var user = CreateUserFormArgs(service);
             var existingUser = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
             if (existingUser is not null)
@@ -142,7 +143,7 @@ public class CPHInline
     {
         try
         {
-            string service = NormalizeService();
+            string service = RankSystemInternal.NormalizeService(this);
             var user = CreateUserFormArgs(service);
             var existingUser = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
             if (existingUser is not null)
@@ -165,7 +166,7 @@ public class CPHInline
     {
         try
         {
-            string service = NormalizeService();
+            string service = RankSystemInternal.NormalizeService(this);
             var user = CreateUserFormArgs(service);
             var userData = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
             var watchTime = userData?.WatchTime ?? 0;
@@ -192,7 +193,7 @@ public class CPHInline
     {
         try
         {
-            string service = NormalizeService();
+            string service = RankSystemInternal.NormalizeService(this);
             var user = CreateUserFormArgs(service);
             var userData = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
             var followDate = userData?.FollowDate.ToString("o") ?? string.Empty;
@@ -219,7 +220,7 @@ public class CPHInline
     {
         try
         {
-            string service = NormalizeService();
+            string service = RankSystemInternal.NormalizeService(this);
             var user = CreateUserFormArgs(service);
             var userData = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
             var messageCount = userData?.MessageCount ?? 0;
@@ -245,10 +246,7 @@ public class CPHInline
     {
         try
         {
-            string service = NormalizeService();
-            var user = CreateUserFormArgs(service);
-            var userData = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
-            var coins = userData?.Coins ?? 0;
+            long coins = RankSystemInternal.GetCoins(this);
             CPH.SetArgument("coins", coins);
             return true;
         }
@@ -296,7 +294,7 @@ public class CPHInline
     {
         try
         {
-            string service = NormalizeService();
+            string service = RankSystemInternal.NormalizeService(this);
             var user = CreateUserFormArgs(service);
             var userData = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
             var gameWhenFollow = userData?.GameWhenFollow ?? string.Empty;
@@ -380,7 +378,7 @@ public class CPHInline
         return true;
     }
 
-    private UserData CreateUserFormArgs(string service, string userName = null, string serviceUserId = null)
+    public UserData CreateUserFormArgs(string service, string userName = null, string serviceUserId = null)
     {
         if (string.IsNullOrEmpty(serviceUserId))
         {
@@ -418,28 +416,9 @@ public class CPHInline
         };
     }
 
-    private string NormalizeService()
-    {
-        // TODO: Refactor. Выглядит как говно.
-        if (!CPH.TryGetArg("eventSource", out string service))
-            if (!CPH.TryGetArg("commandSource", out service))
-                ;
-        if (service.Equals("misc"))
-        {
-            if (args.ContainsKey("timerId") && (args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || args["timerName"].ToString().ToLower().Equals("vkvideolive")))
-            {
-                return "vkvideolive";
-            }
-        }
-
-        if (service.Equals("command"))
-            service = args["commandSource"].ToString();
-        return service.Equals("vkplay", StringComparison.OrdinalIgnoreCase) ? "vkvideolive" : service.ToLower();
-    }
-
     public bool SendReply()
     {
-        string service = NormalizeService();
+        string service = RankSystemInternal.NormalizeService(this);
         if (!CPH.TryGetArg("reply", out string reply))
         {
             reply = "Стример забыл настроить ответ на команду!";
@@ -962,5 +941,42 @@ public static class DatabaseManager
         {
             _lock.ExitReadLock();
         }
+    }
+}
+
+public class RankSystemInternal
+{
+    public static long GetCoins(CPHInline cph)
+    {
+        string service = NormalizeService(cph);
+        var user = cph.CreateUserFormArgs(service);
+        var userData = DatabaseManager.GetUserData(
+            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+            parameters: new[] {
+                new SQLiteParameter("@Service", user.Service),
+                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+            }
+        ).FirstOrDefault();
+
+        return userData?.Coins ?? 0;
+    }
+
+    public static string NormalizeService(CPHInline cph)
+    {
+        // TODO: Refactor. Выглядит как говно.
+        if (!cph.CPH.TryGetArg("eventSource", out string service))
+            if (!cph.CPH.TryGetArg("commandSource", out service))
+                ;
+        if (service.Equals("misc"))
+        {
+            if (cph.args.ContainsKey("timerId") && (cph.args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || cph.args["timerName"].ToString().ToLower().Equals("vkvideolive")))
+            {
+                return "vkvideolive";
+            }
+        }
+
+        if (service.Equals("command"))
+            service = cph.args["commandSource"].ToString();
+        return service.Equals("vkplay", StringComparison.OrdinalIgnoreCase) ? "vkvideolive" : service.ToLower();
     }
 }
