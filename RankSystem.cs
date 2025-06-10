@@ -166,20 +166,8 @@ public class CPHInline
     {
         try
         {
-            string service = RankSystemInternal.NormalizeService(this);
-            var user = CreateUserFormArgs(service);
-            var userData = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
-            var watchTime = userData?.WatchTime ?? 0;
-            string formatedWatchTime = FormatDateTime(watchTime);
-            if (watchTime == 0)
-            {
-                CPH.SetArgument("watchTime", "Время пользователя не найдено!");
-            }
-            else
-            {
-                CPH.SetArgument("watchTime", formatedWatchTime);
-            }
-
+            long watchTime = RankSystemInternal.GetWatchTime(this);
+            CPH.SetArgument("watchTime", watchTime == 0 ? 0 : FormatDateTime(watchTime));
             return true;
         }
         catch (Exception ex)
@@ -193,20 +181,8 @@ public class CPHInline
     {
         try
         {
-            string service = RankSystemInternal.NormalizeService(this);
-            var user = CreateUserFormArgs(service);
-            var userData = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
-            var followDate = userData?.FollowDate.ToString("o") ?? string.Empty;
-            CPH.SetArgument("followDate", followDate);
-            if (followDate.ToString().Equals("0001-01-01T00:00:00.0000000"))
-            {
-                CPH.SetArgument("followDate", "Нет информации о дате фоллова!");
-            }
-            else
-            {
-                CPH.SetArgument("followDate", followDate);
-            }
-
+            DateTime followDate = RankSystemInternal.GetFollowDate(this);
+            CPH.SetArgument("followDate", followDate == DateTime.MinValue ? "неизвестно когда" : followDate.ToString("o"));
             return true;
         }
         catch (Exception ex)
@@ -220,19 +196,8 @@ public class CPHInline
     {
         try
         {
-            string service = RankSystemInternal.NormalizeService(this);
-            var user = CreateUserFormArgs(service);
-            var userData = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
-            var messageCount = userData?.MessageCount ?? 0;
-            if (messageCount == 0)
-            {
-                CPH.SetArgument("messageCount", "Кажется, пользователь ещё не писал в чат.");
-            }
-            else
-            {
-                CPH.SetArgument("messageCount", messageCount);
-            }
-
+            long messageCount = RankSystemInternal.GetMessageCount(this);
+            CPH.SetArgument("messageCount", messageCount);
             return true;
         }
         catch (Exception ex)
@@ -263,8 +228,10 @@ public class CPHInline
         {
             if (args["eventSource"].ToString().Equals("command"))
             {
-
-                long userCoins = long.Parse(args["coins"].ToString());
+                if (!CPH.TryGetArg("userCoins", out long userCoins))
+                {
+                    userCoins = RankSystemInternal.GetCoins(this);
+                }
                 CPH.SetArgument("userCoins", userCoins);
                 long actionCurrency = long.Parse(args["actionCurrency"].ToString());
                 if (userCoins < actionCurrency)
@@ -294,19 +261,8 @@ public class CPHInline
     {
         try
         {
-            string service = RankSystemInternal.NormalizeService(this);
-            var user = CreateUserFormArgs(service);
-            var userData = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
-            var gameWhenFollow = userData?.GameWhenFollow ?? string.Empty;
-            if (string.IsNullOrEmpty(gameWhenFollow))
-            {
-                CPH.SetArgument("gameWhenFollow", "Информация об игре не найдена!");
-            }
-            else
-            {
-                CPH.SetArgument("gameWhenFollow", gameWhenFollow);
-            }
-
+            string gameWhenFollow = RankSystemInternal.GetGameWhenFollow(this);
+            CPH.SetArgument("gameWhenFollow", string.IsNullOrEmpty(gameWhenFollow) ? "игры нет" : gameWhenFollow);
             return true;
         }
         catch (Exception ex)
@@ -959,6 +915,66 @@ public class RankSystemInternal
         ).FirstOrDefault();
 
         return userData?.Coins ?? 0;
+    }
+
+    public static long GetWatchTime(CPHInline cph)
+    {
+        string service = NormalizeService(cph);
+        var user = cph.CreateUserFormArgs(service);
+        var userData = DatabaseManager.GetUserData(
+            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+            parameters: new[] {
+                new SQLiteParameter("@Service", user.Service),
+                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+            }
+        ).FirstOrDefault();
+
+        return userData?.WatchTime ?? 0;
+    }
+
+    public static DateTime GetFollowDate(CPHInline cph)
+    {
+        string service = NormalizeService(cph);
+        var user = cph.CreateUserFormArgs(service);
+        var userData = DatabaseManager.GetUserData(
+            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+            parameters: new[] {
+                new SQLiteParameter("@Service", user.Service),
+                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+            }
+        ).FirstOrDefault();
+
+        return userData?.FollowDate ?? DateTime.MinValue;
+    }
+
+    public static long GetMessageCount(CPHInline cph)
+    {
+        string service = NormalizeService(cph);
+        var user = cph.CreateUserFormArgs(service);
+        var userData = DatabaseManager.GetUserData(
+            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+            parameters: new[] {
+                new SQLiteParameter("@Service", user.Service),
+                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+            }
+        ).FirstOrDefault();
+
+        return userData?.MessageCount ?? 0;
+    }
+
+    public static string GetGameWhenFollow(CPHInline cph)
+    {
+        string service = NormalizeService(cph);
+        var user = cph.CreateUserFormArgs(service);
+        var userData = DatabaseManager.GetUserData(
+            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+            parameters: new[] {
+                new SQLiteParameter("@Service", user.Service),
+                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+            }
+        ).FirstOrDefault();
+
+        return userData?.GameWhenFollow ?? string.Empty;
     }
 
     public static string NormalizeService(CPHInline cph)
