@@ -645,10 +645,10 @@ public static class DatabaseManager
                                 // Вставка нового пользователя
                                 cmd.CommandText = @"
                                 INSERT INTO Users 
-                                (UUID, Service, ServiceUserId, UserName, WatchTime, FollowDate, MessageCount, Coins, GameWhenFollow)
-                                VALUES (
-                                    @UUID, @Service, @ServiceUserId, @UserName, @WatchTime, @FollowDate, @MessageCount, @Coins, @GameWhenFollow
-                                )";
+                            (UUID, Service, ServiceUserId, UserName, WatchTime, FollowDate, MessageCount, Coins, GameWhenFollow)
+                            VALUES (
+                                @UUID, @Service, @ServiceUserId, @UserName, @WatchTime, @FollowDate, @MessageCount, @Coins, @GameWhenFollow
+                            )";
                                 if (string.IsNullOrEmpty(user.UUID))
                                     user.UUID = Guid.NewGuid().ToString();
                                 cmd.Parameters.AddWithValue("@UUID", user.UUID);
