@@ -167,7 +167,7 @@ public class CPHInline
         try
         {
             long watchTime = RankSystemInternal.GetWatchTime(this);
-            CPH.SetArgument("watchTime", watchTime == 0 ? 0 : FormatDateTime(watchTime));
+            CPH.SetArgument("watchTime", watchTime == 0 ? 0 : RankSystemInternal.FormatDateTime(watchTime));
             return true;
         }
         catch (Exception ex)
@@ -300,7 +300,7 @@ public class CPHInline
                 return true;
             }
 
-            var topEntries = topUsers.Select((u, i) => $"{i + 1}. {u.UserName} ({u.Service}) - {FormatValue(u, fieldName)}").ToList();
+            var topEntries = topUsers.Select((u, i) => $"{i + 1}. {u.UserName} ({u.Service}) - {RankSystemInternal.FormatValue(u, fieldName)}").ToList();
             CPH.SetArgument("reply", $"Топ по {displayName}: " + string.Join(", ", topEntries));
             return true;
         }
@@ -309,17 +309,6 @@ public class CPHInline
             CPH.LogError($"[RankSystem] GetTopViewers Error: {ex}");
             return false;
         }
-    }
-
-    private string FormatValue(UserData user, string field)
-    {
-        return field switch
-        {
-            "WatchTime" => FormatDateTime(user.WatchTime),
-            "MessageCount" => $"{user.MessageCount} сообщ.",
-            "Coins" => $"{user.Coins} монет",
-            _ => "0"
-        };
     }
 
     public bool ClearUsersCoins()
@@ -393,97 +382,6 @@ public class CPHInline
         }
 
         return true;
-    }
-
-    public string FormatDateTime(long totalSeconds)
-    {
-        // Преобразуем общее количество секунд в годы, месяцы, дни, часы, минуты и секунды.
-        int years = 0;
-        int months = 0;
-        int days = (int)(totalSeconds / (60 * 60 * 24));
-        int hours = (int)((totalSeconds % (60 * 60 * 24)) / (60 * 60));
-        int minutes = (int)((totalSeconds % (60 * 60)) / 60);
-        int seconds = (int)(totalSeconds % 60);
-        if (days >= 365)
-        {
-            years = days / 365; // Примерно считаем годы
-            days %= 365; // Остаток дней после вычисления лет
-        }
-
-        if (days >= 30)
-        {
-            months = days / 30;
-            days %= 30; // Остаток дней после вычисления месяцев
-        }
-
-        string result = "";
-        if (years > 0)
-            result += $"{years.ToString()} {GetYearWord(years)} ";
-        if (months > 0)
-            result += $"{months.ToString()} {GetMonthWord(months)} ";
-        if (days > 0)
-            result += $"{days.ToString()} {GetDayWord(days)} ";
-        if (hours > 0)
-            result += $"{hours.ToString()} {GetHourWord(hours)} ";
-        if (minutes > 0)
-            result += $"{minutes.ToString()} {GetMinuteWord(minutes)} ";
-        if (seconds > 0)
-            result += $"{seconds.ToString()} {GetSecondWord(seconds)}";
-        return result.Trim(); // Убираем лишние пробелы в конце
-    }
-
-    static string GetYearWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11)
-            return "год";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
-            return "года";
-        return "лет";
-    }
-
-    static string GetMonthWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11)
-            return "месяц";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
-            return "месяца";
-        return "месяцев";
-    }
-
-    static string GetDayWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11)
-            return "день";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
-            return "дня";
-        return "дней";
-    }
-
-    static string GetHourWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11)
-            return "час";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
-            return "часа";
-        return "часов";
-    }
-
-    static string GetMinuteWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11)
-            return "минуту";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
-            return "минуты";
-        return "минут";
-    }
-
-    static string GetSecondWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11)
-            return "секунду";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
-            return "секунды";
-        return "секунд";
     }
 }
 
@@ -994,5 +892,107 @@ public class RankSystemInternal
         if (service.Equals("command"))
             service = cph.args["commandSource"].ToString();
         return service.Equals("vkplay", StringComparison.OrdinalIgnoreCase) ? "vkvideolive" : service.ToLower();
+    }
+
+    public static string FormatValue(UserData user, string field)
+    {
+        return field switch
+        {
+            "WatchTime" => FormatDateTime(user.WatchTime),
+            "MessageCount" => $"{user.MessageCount} сообщ.",
+            "Coins" => $"{user.Coins} монет",
+            _ => "0"
+        };
+    }
+
+    public static string FormatDateTime(long totalSeconds)
+    {
+        // Преобразуем общее количество секунд в годы, месяцы, дни, часы, минуты и секунды.
+        int years = 0;
+        int months = 0;
+        int days = (int)(totalSeconds / (60 * 60 * 24));
+        int hours = (int)((totalSeconds % (60 * 60 * 24)) / (60 * 60));
+        int minutes = (int)((totalSeconds % (60 * 60)) / 60);
+        int seconds = (int)(totalSeconds % 60);
+        if (days >= 365)
+        {
+            years = days / 365; // Примерно считаем годы
+            days %= 365; // Остаток дней после вычисления лет
+        }
+
+        if (days >= 30)
+        {
+            months = days / 30;
+            days %= 30; // Остаток дней после вычисления месяцев
+        }
+
+        string result = "";
+        if (years > 0)
+            result += $"{years.ToString()} {GetYearWord(years)} ";
+        if (months > 0)
+            result += $"{months.ToString()} {GetMonthWord(months)} ";
+        if (days > 0)
+            result += $"{days.ToString()} {GetDayWord(days)} ";
+        if (hours > 0)
+            result += $"{hours.ToString()} {GetHourWord(hours)} ";
+        if (minutes > 0)
+            result += $"{minutes.ToString()} {GetMinuteWord(minutes)} ";
+        if (seconds > 0)
+            result += $"{seconds.ToString()} {GetSecondWord(seconds)}";
+        return result.Trim(); // Убираем лишние пробелы в конце
+    }
+
+    static string GetYearWord(int count)
+    {
+        if (count % 10 == 1 && count % 100 != 11)
+            return "год";
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "года";
+        return "лет";
+    }
+
+    static string GetMonthWord(int count)
+    {
+        if (count % 10 == 1 && count % 100 != 11)
+            return "месяц";
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "месяца";
+        return "месяцев";
+    }
+
+    static string GetDayWord(int count)
+    {
+        if (count % 10 == 1 && count % 100 != 11)
+            return "день";
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "дня";
+        return "дней";
+    }
+
+    static string GetHourWord(int count)
+    {
+        if (count % 10 == 1 && count % 100 != 11)
+            return "час";
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "часа";
+        return "часов";
+    }
+
+    static string GetMinuteWord(int count)
+    {
+        if (count % 10 == 1 && count % 100 != 11)
+            return "минуту";
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "минуты";
+        return "минут";
+    }
+
+    static string GetSecondWord(int count)
+    {
+        if (count % 10 == 1 && count % 100 != 11)
+            return "секунду";
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "секунды";
+        return "секунд";
     }
 }
