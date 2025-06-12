@@ -14,6 +14,10 @@ using System.Linq;
 using System.Threading;
 using System.Data;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.IO;
+using Newtonsoft.Json;
 
 public class CPHInline
 {
@@ -383,6 +387,76 @@ public class CPHInline
 
         return true;
     }
+
+    public bool TransferFromMiniChat()
+    {
+        try
+        {
+            string jsonContent = File.ReadAllText("Live.json");
+            var liveData = JsonConvert.DeserializeObject<List<LiveData>>(jsonContent);
+
+            if (liveData == null)
+            {
+                throw new Exception("Не удалось прочитать данные из Live.json");
+            }
+
+            foreach (var data in liveData)
+            {
+                if (data.Type != "Follow" || data.Service == "Boosty")
+                    continue;
+
+                // Получаем существующие данные пользователя
+                var existingUser = DatabaseManager.GetUserData(
+                    filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+                    parameters: new[] {
+                        new SQLiteParameter("@Service", data.Service == "Unknown" ? "vkvideolive" : data.Service.ToLower()),
+                        new SQLiteParameter("@ServiceUserId", data.UserID)
+                    }
+                ).FirstOrDefault();
+
+                // Если пользователь существует и у него есть дата фоллоу, пропускаем
+                if (existingUser != null && existingUser.FollowDate != DateTime.MinValue)
+                    continue;
+
+                // Создаем или обновляем данные пользователя
+                var user = new UserData
+                {
+                    Service = data.Service == "Unknown" ? "vkvideolive" : data.Service.ToLower(),
+                    ServiceUserId = data.UserID,
+                    UserName = existingUser?.UserName ?? data.UserName.ToLower(), // Используем существующий username если есть
+                    FollowDate = DateTime.Parse(data.Date),
+                    GameWhenFollow = null
+                };
+
+                DatabaseManager.UpsertUser(user);
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            CPH.LogError($"[RankSystem] TransferFromMiniChat Error: {ex}");
+            return false;
+        }
+    }
+}
+
+// Класс для десериализации данных из Live.json
+public class LiveData
+{
+    public string Type { get; set; }
+    public string Service { get; set; }
+    public string Date { get; set; }
+    public string ID { get; set; }
+    public string UserID { get; set; }
+    public string UserName { get; set; }
+    public AvatarData Avatar { get; set; }
+}
+
+public class AvatarData
+{
+    public string Default { get; set; }
+    public string Large { get; set; }
 }
 
 public class UserData
@@ -412,6 +486,7 @@ public static class DatabaseManager
     // TODO: Надо что-то придумать с хардкодом пути до базы. Но, на первый взгляд, отсюда не получить аргументы среды выполнения.
     private static readonly string DbPath = "RankSystem.db";
     private static readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
+    private static readonly ReaderWriterLockSlim _historyLock = new ReaderWriterLockSlim();
     private static SQLiteConnection CreateConnection()
     {
         var connection = new SQLiteConnection($"Data Source={DbPath};Version=3;");
@@ -569,8 +644,12 @@ public static class DatabaseManager
         // Определим, является ли это добавлением сообщения
         bool isMessageIncrement = false;
         long coinsToAdd = 0;
+        string oldUserName = null;
+        string uuid = null;
+
         // Получаем данные о пользователе ДО входа в блокировку записи
         var existingUser = GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
+
         // Расчет дельты для инкрементов
         if (existingUser != null)
         {
@@ -580,6 +659,13 @@ public static class DatabaseManager
             }
 
             coinsToAdd = user.Coins - existingUser.Coins;
+
+            // Проверяем, изменился ли никнейм
+            if (!string.Equals(existingUser.UserName, user.UserName, StringComparison.OrdinalIgnoreCase))
+            {
+                oldUserName = existingUser.UserName;
+                uuid = existingUser.UUID;
+            }
         }
         else
         {
@@ -602,13 +688,6 @@ public static class DatabaseManager
                             cmd.Transaction = transaction;
                             if (existingUser != null)
                             {
-                                // Проверяем, изменился ли никнейм
-                                if (!string.Equals(existingUser.UserName, user.UserName, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    // Добавляем запись в историю
-                                    AddUserNameHistory(existingUser.UUID, existingUser.UserName, user.UserName);
-                                }
-
                                 // Обновление существующего пользователя - используем атомарные обновления
                                 string updateQuery = @"
                                 UPDATE Users 
@@ -678,6 +757,12 @@ public static class DatabaseManager
         {
             _lock.ExitWriteLock();
         }
+
+        // Если изменился никнейм, добавляем запись в историю после завершения основной транзакции
+        if (oldUserName != null && uuid != null)
+        {
+            AddUserNameHistory(uuid, oldUserName, user.UserName);
+        }
     }
 
     public static List<UserData> GetUserData(string filter = null, SQLiteParameter[] parameters = null)
@@ -728,7 +813,7 @@ public static class DatabaseManager
 
     public static void AddUserNameHistory(string uuid, string oldUserName, string newUserName)
     {
-        _lock.EnterWriteLock();
+        _historyLock.EnterWriteLock();
         try
         {
             using (var connection = CreateConnection())
@@ -739,19 +824,17 @@ public static class DatabaseManager
                     cmd.CommandText = @"
                     INSERT INTO UserNameHistory (UUID, OldUserName, NewUserName, ChangeDate)
                     VALUES (@UUID, @OldUserName, @NewUserName, @ChangeDate)";
-
                     cmd.Parameters.AddWithValue("@UUID", uuid);
                     cmd.Parameters.AddWithValue("@OldUserName", oldUserName);
                     cmd.Parameters.AddWithValue("@NewUserName", newUserName);
-                    cmd.Parameters.AddWithValue("@ChangeDate", DateTime.Now.ToString("o"));
-
+                    cmd.Parameters.AddWithValue("@ChangeDate", DateTime.UtcNow.ToString("o"));
                     cmd.ExecuteNonQuery();
                 }
             }
         }
         finally
         {
-            _lock.ExitWriteLock();
+            _historyLock.ExitWriteLock();
         }
     }
 
