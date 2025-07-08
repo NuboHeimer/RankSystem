@@ -143,25 +143,17 @@ public class CPHInline
         }
     }
 
-    public bool AddCoins(long? coinsToAdd = null)
+    public bool GetMessageCount()
     {
         try
         {
-            string service = RankSystemInternal.NormalizeService(this);
-            var user = CreateUserFormArgs(service);
-            var existingUser = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
-            if (existingUser is not null)
-                user = existingUser;
-            long coinsFromArgs = DEFAULT_COINS_TO_ADD;
-            if (!coinsToAdd.HasValue && !CPH.TryGetArg("coinsToAdd", out coinsFromArgs))
-                coinsFromArgs = DEFAULT_COINS_TO_ADD;
-            user.Coins += coinsToAdd ?? coinsFromArgs;
-            DatabaseManager.UpsertUser(user);
+            long messageCount = RankSystemInternal.GetMessageCount(this);
+            CPH.SetArgument("messageCount", messageCount);
             return true;
         }
         catch (Exception ex)
         {
-            CPH.LogError($"[RankSystem] AddCoins Error: {ex}");
+            CPH.LogError($"[RankSystem] GetMessageCount Error: {ex}");
             return false;
         }
     }
@@ -196,17 +188,40 @@ public class CPHInline
         }
     }
 
-    public bool GetMessageCount()
+    public bool GetGameWhenFollow()
     {
         try
         {
-            long messageCount = RankSystemInternal.GetMessageCount(this);
-            CPH.SetArgument("messageCount", messageCount);
+            string gameWhenFollow = RankSystemInternal.GetGameWhenFollow(this);
+            CPH.SetArgument("gameWhenFollow", string.IsNullOrEmpty(gameWhenFollow) ? "игры нет" : gameWhenFollow);
             return true;
         }
         catch (Exception ex)
         {
-            CPH.LogError($"[RankSystem] GetMessageCount Error: {ex}");
+            CPH.LogError($"[RankSystem] GetGameWhenFollow Error: {ex}");
+            return false;
+        }
+    }
+
+    public bool AddCoins(long? coinsToAdd = null)
+    {
+        try
+        {
+            string service = RankSystemInternal.NormalizeService(this);
+            var user = CreateUserFormArgs(service);
+            var existingUser = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
+            if (existingUser is not null)
+                user = existingUser;
+            long coinsFromArgs = DEFAULT_COINS_TO_ADD;
+            if (!coinsToAdd.HasValue && !CPH.TryGetArg("coinsToAdd", out coinsFromArgs))
+                coinsFromArgs = DEFAULT_COINS_TO_ADD;
+            user.Coins += coinsToAdd ?? coinsFromArgs;
+            DatabaseManager.UpsertUser(user);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            CPH.LogError($"[RankSystem] AddCoins Error: {ex}");
             return false;
         }
     }
@@ -261,19 +276,16 @@ public class CPHInline
         }
     }
 
-    public bool GetGameWhenFollow()
+    public bool ClearUsersCoins()
     {
-        try
+        List<UserData> users = DatabaseManager.GetUserData();
+        foreach (UserData user in users)
         {
-            string gameWhenFollow = RankSystemInternal.GetGameWhenFollow(this);
-            CPH.SetArgument("gameWhenFollow", string.IsNullOrEmpty(gameWhenFollow) ? "игры нет" : gameWhenFollow);
-            return true;
+            user.Coins = 0 - user.Coins;
+            DatabaseManager.UpsertUser(user);
         }
-        catch (Exception ex)
-        {
-            CPH.LogError($"[RankSystem] GetGameWhenFollow Error: {ex}");
-            return false;
-        }
+
+        return true;
     }
 
     public bool GetTopViewers()
@@ -313,18 +325,6 @@ public class CPHInline
             CPH.LogError($"[RankSystem] GetTopViewers Error: {ex}");
             return false;
         }
-    }
-
-    public bool ClearUsersCoins()
-    {
-        List<UserData> users = DatabaseManager.GetUserData();
-        foreach (UserData user in users)
-        {
-            user.Coins = 0 - user.Coins;
-            DatabaseManager.UpsertUser(user);
-        }
-
-        return true;
     }
 
     public UserData CreateUserFormArgs(string service, string userName = null, string serviceUserId = null)
