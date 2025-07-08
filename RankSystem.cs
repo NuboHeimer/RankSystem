@@ -18,6 +18,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.IO;
 using Newtonsoft.Json;
+using System.Windows.Forms;
+using System.Drawing;
+using System.ComponentModel;
 
 public class CPHInline
 {
@@ -441,6 +444,15 @@ public class CPHInline
             CPH.LogError($"[RankSystem] TransferFromMiniChat Error: {ex}");
             return false;
         }
+    }
+
+    public bool OpenRankSystemEditor()
+    {
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
+        var form = new RankSystemForm();
+        form.ShowDialog();
+        return true;
     }
 }
 
@@ -882,6 +894,29 @@ public static class DatabaseManager
             _lock.ExitReadLock();
         }
     }
+
+    public static void DeleteUser(UserData user)
+    {
+        _lock.EnterWriteLock();
+        try
+        {
+            using (var connection = CreateConnection())
+            {
+                connection.Open();
+                using (var cmd = new SQLiteCommand(connection))
+                {
+                    cmd.CommandText = "DELETE FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId";
+                    cmd.Parameters.AddWithValue("@Service", user.Service);
+                    cmd.Parameters.AddWithValue("@ServiceUserId", user.ServiceUserId);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }
+        finally
+        {
+            _lock.ExitWriteLock();
+        }
+    }
 }
 
 public class RankSystemInternal
@@ -1080,5 +1115,385 @@ public class RankSystemInternal
         if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
             return "секунды";
         return "секунд";
+    }
+}
+
+public class RankSystemForm : Form
+{
+    private DataGridView usersGrid = new DataGridView();
+    private Button btnAdd = new Button();
+    private Button btnSave = new Button();
+    private Button btnRefresh = new Button();
+    private Button btnDelete = new Button();
+    private TextBox txtUUID = new TextBox();
+    private TextBox txtService = new TextBox();
+    private TextBox txtServiceUserId = new TextBox();
+    private TextBox txtUserName = new TextBox();
+    private TextBox txtWatchTime = new TextBox();
+    private TextBox txtFollowDate = new TextBox();
+    private TextBox txtMessageCount = new TextBox();
+    private TextBox txtCoins = new TextBox();
+    private TextBox txtGameWhenFollow = new TextBox();
+    private Label lblUUID = new Label();
+    private Label lblService = new Label();
+    private Label lblServiceUserId = new Label();
+    private Label lblUserName = new Label();
+    private Label lblWatchTime = new Label();
+    private Label lblFollowDate = new Label();
+    private Label lblMessageCount = new Label();
+    private Label lblCoins = new Label();
+    private Label lblGameWhenFollow = new Label();
+    private UserData selectedUser = null;
+    private TextBox txtSearch = new TextBox();
+    private Button btnSearch = new Button();
+    private Button btnClearSearch = new Button();
+    private List<UserData> allUsers = new List<UserData>();
+    private BindingList<UserData> bindingUsers = new BindingList<UserData>();
+    private string lastSortColumn = null;
+    private bool lastSortAsc = true;
+    private TextBox[] columnFilters;
+    private string[] columnNames = new[] { "UUID", "Service", "ServiceUserId", "UserName", "WatchTime", "FollowDate", "MessageCount", "Coins", "GameWhenFollow" };
+    private Panel panelFilters = new Panel();
+
+    public RankSystemForm()
+    {
+        InitializeComponent();
+        LoadUsers();
+    }
+
+    private void InitializeComponent()
+    {
+        this.Text = "RankSystem Database Editor";
+        this.Size = new Size(1240, 600);
+        this.MinimumSize = new Size(1240, 600);
+        this.StartPosition = FormStartPosition.CenterScreen;
+
+        txtSearch.SetBounds(10, 10, 300, 24);
+        txtSearch.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+        txtSearch.KeyDown += TxtSearch_KeyDown;
+        btnSearch.Text = "Поиск";
+        btnSearch.SetBounds(320, 10, 70, 24);
+        btnSearch.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+        btnSearch.Click += BtnSearch_Click;
+        btnClearSearch.Text = "Сбросить";
+        btnClearSearch.SetBounds(400, 10, 80, 24);
+        btnClearSearch.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+        btnClearSearch.Click += BtnClearSearch_Click;
+
+        // Панель для фильтров
+        panelFilters.Parent = this;
+        panelFilters.Location = new Point(10, 60);
+        panelFilters.Height = 22;
+        panelFilters.Width = 800;
+        panelFilters.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        this.Controls.Add(panelFilters);
+
+        // Фильтры по колонкам
+        columnFilters = new TextBox[columnNames.Length];
+        for (int i = 0; i < columnNames.Length; i++)
+        {
+            var tb = new TextBox();
+            tb.Parent = panelFilters;
+            tb.Tag = columnNames[i];
+            tb.TextChanged += ColumnFilter_TextChanged;
+            tb.Height = 20;
+            tb.Visible = true;
+            columnFilters[i] = tb;
+            panelFilters.Controls.Add(tb);
+        }
+
+        usersGrid.Location = new Point(10, panelFilters.Location.Y + panelFilters.Height + 2);
+        usersGrid.Size = new Size(800, 468);
+        usersGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        usersGrid.MultiSelect = false;
+        usersGrid.ReadOnly = true;
+        usersGrid.AutoGenerateColumns = false;
+        usersGrid.AllowUserToAddRows = false;
+        usersGrid.AllowUserToDeleteRows = false;
+        usersGrid.DataSource = null;
+        usersGrid.CellClick += UsersGrid_CellClick;
+        usersGrid.ColumnHeaderMouseClick += UsersGrid_ColumnHeaderMouseClick;
+        usersGrid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+        usersGrid.ColumnWidthChanged += (s, e) => PositionColumnFilters();
+        usersGrid.Scroll += (s, e) => PositionColumnFilters();
+        usersGrid.SizeChanged += (s, e) => PositionColumnFilters();
+        this.Resize += (s, e) => PositionColumnFilters();
+
+        usersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "UUID", DataPropertyName = "UUID", Width = 120, SortMode = DataGridViewColumnSortMode.Automatic });
+        usersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Service", DataPropertyName = "Service", Width = 80, SortMode = DataGridViewColumnSortMode.Automatic });
+        usersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "ServiceUserId", DataPropertyName = "ServiceUserId", Width = 120, SortMode = DataGridViewColumnSortMode.Automatic });
+        usersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "UserName", DataPropertyName = "UserName", Width = 120, SortMode = DataGridViewColumnSortMode.Automatic });
+        usersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "WatchTime", DataPropertyName = "WatchTime", Width = 80, SortMode = DataGridViewColumnSortMode.Automatic });
+        usersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "FollowDate", DataPropertyName = "FollowDate", Width = 140, SortMode = DataGridViewColumnSortMode.Automatic });
+        usersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "MessageCount", DataPropertyName = "MessageCount", Width = 80, SortMode = DataGridViewColumnSortMode.Automatic });
+        usersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Coins", DataPropertyName = "Coins", Width = 80, SortMode = DataGridViewColumnSortMode.Automatic });
+        usersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "GameWhenFollow", DataPropertyName = "GameWhenFollow", Width = 120, SortMode = DataGridViewColumnSortMode.Automatic });
+
+        int left = 820, top = 40, spacing = 28, labelWidth = 110, boxWidth = 240;
+        lblUUID.Text = "UUID:"; lblUUID.SetBounds(left, top, labelWidth, 20); lblUUID.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        txtUUID.SetBounds(left + labelWidth, top, boxWidth, 20); txtUUID.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        lblService.Text = "Service:"; lblService.SetBounds(left, top += spacing, labelWidth, 20); lblService.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        txtService.SetBounds(left + labelWidth, top, boxWidth, 20); txtService.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        lblServiceUserId.Text = "ServiceUserId:"; lblServiceUserId.SetBounds(left, top += spacing, labelWidth, 20); lblServiceUserId.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        txtServiceUserId.SetBounds(left + labelWidth, top, boxWidth, 20); txtServiceUserId.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        lblUserName.Text = "UserName:"; lblUserName.SetBounds(left, top += spacing, labelWidth, 20); lblUserName.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        txtUserName.SetBounds(left + labelWidth, top, boxWidth, 20); txtUserName.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        lblWatchTime.Text = "WatchTime:"; lblWatchTime.SetBounds(left, top += spacing, labelWidth, 20); lblWatchTime.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        txtWatchTime.SetBounds(left + labelWidth, top, boxWidth, 20); txtWatchTime.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        lblFollowDate.Text = "FollowDate (ISO):"; lblFollowDate.SetBounds(left, top += spacing, labelWidth, 20); lblFollowDate.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        txtFollowDate.SetBounds(left + labelWidth, top, boxWidth, 20); txtFollowDate.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        lblMessageCount.Text = "MessageCount:"; lblMessageCount.SetBounds(left, top += spacing, labelWidth, 20); lblMessageCount.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        txtMessageCount.SetBounds(left + labelWidth, top, boxWidth, 20); txtMessageCount.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        lblCoins.Text = "Coins:"; lblCoins.SetBounds(left, top += spacing, labelWidth, 20); lblCoins.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        txtCoins.SetBounds(left + labelWidth, top, boxWidth, 20); txtCoins.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        lblGameWhenFollow.Text = "GameWhenFollow:"; lblGameWhenFollow.SetBounds(left, top += spacing, labelWidth, 20); lblGameWhenFollow.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        txtGameWhenFollow.SetBounds(left + labelWidth, top, boxWidth, 20); txtGameWhenFollow.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+
+        btnAdd.Text = "Add New";
+        btnAdd.SetBounds(left, top += spacing + 10, 80, 30); btnAdd.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        btnSave.Text = "Save";
+        btnSave.SetBounds(left + 180, top, 80, 30); btnSave.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        btnRefresh.Text = "Refresh";
+        btnRefresh.SetBounds(left, top + 40, 170, 30); btnRefresh.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        btnDelete.Text = "Delete";
+        btnDelete.SetBounds(left, top + 80, 170, 30); btnDelete.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+
+        this.Controls.Add(txtSearch);
+        this.Controls.Add(btnSearch);
+        this.Controls.Add(btnClearSearch);
+        this.Controls.Add(usersGrid);
+        this.Controls.Add(lblUUID); this.Controls.Add(txtUUID);
+        this.Controls.Add(lblService); this.Controls.Add(txtService);
+        this.Controls.Add(lblServiceUserId); this.Controls.Add(txtServiceUserId);
+        this.Controls.Add(lblUserName); this.Controls.Add(txtUserName);
+        this.Controls.Add(lblWatchTime); this.Controls.Add(txtWatchTime);
+        this.Controls.Add(lblFollowDate); this.Controls.Add(txtFollowDate);
+        this.Controls.Add(lblMessageCount); this.Controls.Add(txtMessageCount);
+        this.Controls.Add(lblCoins); this.Controls.Add(txtCoins);
+        this.Controls.Add(lblGameWhenFollow); this.Controls.Add(txtGameWhenFollow);
+        this.Controls.Add(btnAdd); this.Controls.Add(btnSave); this.Controls.Add(btnRefresh); this.Controls.Add(btnDelete);
+
+        PositionColumnFilters();
+
+        btnAdd.Click += BtnAdd_Click;
+        btnSave.Click += BtnSave_Click;
+        btnRefresh.Click += BtnRefresh_Click;
+        btnDelete.Click += BtnDelete_Click;
+    }
+
+    private void LoadUsers()
+    {
+        allUsers = DatabaseManager.GetUserData();
+        bindingUsers = new BindingList<UserData>(allUsers);
+        usersGrid.DataSource = bindingUsers;
+    }
+
+    private void UsersGrid_CellClick(object sender, DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex >= 0)
+        {
+            var user = usersGrid.Rows[e.RowIndex].DataBoundItem as UserData;
+            if (user != null)
+            {
+                selectedUser = user;
+                FillUserFields(user);
+            }
+        }
+    }
+
+    private void FillUserFields(UserData user)
+    {
+        txtUUID.Text = user.UUID;
+        txtService.Text = user.Service;
+        txtServiceUserId.Text = user.ServiceUserId;
+        txtUserName.Text = user.UserName;
+        txtWatchTime.Text = user.WatchTime.ToString();
+        txtFollowDate.Text = user.FollowDate.ToString("o");
+        txtMessageCount.Text = user.MessageCount.ToString();
+        txtCoins.Text = user.Coins.ToString();
+        txtGameWhenFollow.Text = user.GameWhenFollow;
+    }
+
+    private UserData GetUserFromFields()
+    {
+        return new UserData
+        {
+            UUID = txtUUID.Text,
+            Service = txtService.Text,
+            ServiceUserId = txtServiceUserId.Text,
+            UserName = txtUserName.Text,
+            WatchTime = long.TryParse(txtWatchTime.Text, out var wt) ? wt : 0,
+            FollowDate = DateTime.TryParse(txtFollowDate.Text, out var fd) ? fd : DateTime.MinValue,
+            MessageCount = long.TryParse(txtMessageCount.Text, out var mc) ? mc : 0,
+            Coins = long.TryParse(txtCoins.Text, out var c) ? c : 0,
+            GameWhenFollow = txtGameWhenFollow.Text
+        };
+    }
+
+    private void BtnAdd_Click(object sender, EventArgs e)
+    {
+        ClearUserFields();
+        txtUUID.Text = Guid.NewGuid().ToString();
+        selectedUser = null;
+        usersGrid.ClearSelection();
+    }
+
+    private void BtnSave_Click(object sender, EventArgs e)
+    {
+        var user = GetUserFromFields();
+        DatabaseManager.UpsertUser(user);
+        LoadUsers();
+        ClearAllFilters();
+        MessageBox.Show("User saved.");
+    }
+
+    private void BtnRefresh_Click(object sender, EventArgs e)
+    {
+        LoadUsers();
+        ClearAllFilters();
+    }
+
+    private void BtnDelete_Click(object sender, EventArgs e)
+    {
+        if (selectedUser == null)
+        {
+            MessageBox.Show("Выберите пользователя для удаления.");
+            return;
+        }
+        var result = MessageBox.Show($"Удалить пользователя {selectedUser.UserName} ({selectedUser.Service})?", "Подтверждение удаления", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+        if (result == DialogResult.Yes)
+        {
+            DatabaseManager.DeleteUser(selectedUser);
+            LoadUsers();
+            ClearAllFilters();
+            ClearUserFields();
+            selectedUser = null;
+        }
+    }
+
+    private void ClearUserFields()
+    {
+        txtUUID.Text = "";
+        txtService.Text = "";
+        txtServiceUserId.Text = "";
+        txtUserName.Text = "";
+        txtWatchTime.Text = "0";
+        txtFollowDate.Text = "0001-01-01T00:00:00.0000000";
+        txtMessageCount.Text = "0";
+        txtCoins.Text = "0";
+        txtGameWhenFollow.Text = "";
+    }
+
+    private void ClearAllFilters()
+    {
+        txtSearch.Text = "";
+        foreach (var tb in columnFilters)
+            tb.Text = "";
+        ApplySearch("");
+        ApplyColumnFilters();
+    }
+
+    private void ApplySearch(string search)
+    {
+        if (string.IsNullOrWhiteSpace(search))
+        {
+            usersGrid.DataSource = bindingUsers;
+            return;
+        }
+        string s = search.ToLowerInvariant();
+        var filtered = allUsers.Where(u =>
+            (u.UUID != null && u.UUID.ToLowerInvariant().Contains(s)) ||
+            (u.Service != null && u.Service.ToLowerInvariant().Contains(s)) ||
+            (u.ServiceUserId != null && u.ServiceUserId.ToLowerInvariant().Contains(s)) ||
+            (u.UserName != null && u.UserName.ToLowerInvariant().Contains(s)) ||
+            u.WatchTime.ToString().Contains(s) ||
+            (u.FollowDate != DateTime.MinValue && u.FollowDate.ToString("o").ToLowerInvariant().Contains(s)) ||
+            u.MessageCount.ToString().Contains(s) ||
+            u.Coins.ToString().Contains(s) ||
+            (u.GameWhenFollow != null && u.GameWhenFollow.ToLowerInvariant().Contains(s))
+        ).ToList();
+        usersGrid.DataSource = new BindingList<UserData>(filtered);
+    }
+
+    private void BtnSearch_Click(object sender, EventArgs e)
+    {
+        ApplySearch(txtSearch.Text);
+    }
+
+    private void BtnClearSearch_Click(object sender, EventArgs e)
+    {
+        txtSearch.Text = "";
+        ApplySearch("");
+    }
+
+    private void TxtSearch_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.KeyCode == Keys.Enter)
+        {
+            ApplySearch(txtSearch.Text);
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+        }
+    }
+
+    private void UsersGrid_ColumnHeaderMouseClick(object sender, DataGridViewCellMouseEventArgs e)
+    {
+        string column = usersGrid.Columns[e.ColumnIndex].DataPropertyName;
+        bool asc = lastSortColumn != column ? true : !lastSortAsc;
+        lastSortColumn = column;
+        lastSortAsc = asc;
+
+        var list = (usersGrid.DataSource as IEnumerable<UserData>)?.ToList() ?? new List<UserData>();
+        var prop = typeof(UserData).GetProperty(column);
+        if (prop != null)
+        {
+            if (asc)
+                list = list.OrderBy(x => prop.GetValue(x, null)).ToList();
+            else
+                list = list.OrderByDescending(x => prop.GetValue(x, null)).ToList();
+            usersGrid.DataSource = new BindingList<UserData>(list);
+        }
+    }
+
+    private void ColumnFilter_TextChanged(object sender, EventArgs e)
+    {
+        ApplyColumnFilters();
+    }
+
+    private void ApplyColumnFilters()
+    {
+        IEnumerable<UserData> filtered = allUsers;
+        for (int i = 0; i < columnFilters.Length; i++)
+        {
+            string filter = columnFilters[i].Text.Trim().ToLowerInvariant();
+            if (!string.IsNullOrEmpty(filter))
+            {
+                string col = columnNames[i];
+                filtered = filtered.Where(u =>
+                {
+                    var prop = typeof(UserData).GetProperty(col);
+                    var val = prop?.GetValue(u, null);
+                    if (val == null) return false;
+                    if (val is DateTime dt)
+                        return dt != DateTime.MinValue && dt.ToString("o").ToLowerInvariant().Contains(filter);
+                    return val.ToString().ToLowerInvariant().Contains(filter);
+                });
+            }
+        }
+        usersGrid.DataSource = new BindingList<UserData>(filtered.ToList());
+    }
+
+    private void PositionColumnFilters()
+    {
+        int x = usersGrid.RowHeadersVisible ? usersGrid.RowHeadersWidth - usersGrid.HorizontalScrollingOffset : -usersGrid.HorizontalScrollingOffset;
+        for (int i = 0; i < usersGrid.Columns.Count; i++)
+        {
+            var col = usersGrid.Columns[i];
+            var tb = columnFilters[i];
+            tb.SetBounds(x, 0, col.Width, panelFilters.Height - 2);
+            tb.Visible = col.Visible;
+            x += col.Width;
+        }
+        panelFilters.Width = usersGrid.Width;
     }
 }
