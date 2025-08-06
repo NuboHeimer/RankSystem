@@ -1510,6 +1510,7 @@ public class DataGridViewFilteredHeaderCell : DataGridViewColumnHeaderCell
         filterPanel.Visible = false;
         filterPanel.BackColor = Color.White;
         filterPanel.BorderStyle = BorderStyle.FixedSingle;
+        filterPanel.LostFocus += FilterPanel_LostFocus;
 
         // Создаем кнопку фильтра
         filterButton = new Button();
@@ -1524,6 +1525,7 @@ public class DataGridViewFilteredHeaderCell : DataGridViewColumnHeaderCell
         filterTextBox.Size = new Size(80, 20);
         filterTextBox.TextChanged += FilterTextBox_TextChanged;
         filterTextBox.KeyDown += FilterTextBox_KeyDown;
+        filterTextBox.LostFocus += FilterTextBox_LostFocus;
 
         // Размещаем элементы
         filterPanel.Controls.Add(filterButton);
@@ -1605,18 +1607,36 @@ public class DataGridViewFilteredHeaderCell : DataGridViewColumnHeaderCell
         UpdateFilterPosition();
         filterTextBox.Focus();
         isFilterVisible = true;
+
+        // Обновляем отображение заголовка
+        if (DataGridView != null)
+        {
+            DataGridView.InvalidateColumn(parentColumn.Index);
+        }
     }
 
     public void HideFilter()
     {
         filterPanel.Visible = false;
         isFilterVisible = false;
+
+        // Обновляем отображение заголовка
+        if (DataGridView != null)
+        {
+            DataGridView.InvalidateColumn(parentColumn.Index);
+        }
     }
 
     public void ClearFilter()
     {
         filterTextBox.Text = "";
         ApplyFilter("");
+
+        // Обновляем отображение заголовка
+        if (DataGridView != null)
+        {
+            DataGridView.InvalidateColumn(parentColumn.Index);
+        }
     }
 
     public string GetFilterText()
@@ -1627,6 +1647,12 @@ public class DataGridViewFilteredHeaderCell : DataGridViewColumnHeaderCell
     private void FilterTextBox_TextChanged(object sender, EventArgs e)
     {
         ApplyFilter(filterTextBox.Text);
+
+        // Обновляем отображение заголовка для показа индикации фильтра
+        if (DataGridView != null)
+        {
+            DataGridView.InvalidateColumn(parentColumn.Index);
+        }
     }
 
     private void FilterTextBox_KeyDown(object sender, KeyEventArgs e)
@@ -1635,6 +1661,18 @@ public class DataGridViewFilteredHeaderCell : DataGridViewColumnHeaderCell
         {
             HideFilter();
         }
+    }
+
+    private void FilterTextBox_LostFocus(object sender, EventArgs e)
+    {
+        // Простое закрытие фильтра при потере фокуса
+        HideFilter();
+    }
+
+    private void FilterPanel_LostFocus(object sender, EventArgs e)
+    {
+        // Простое закрытие фильтра при потере фокуса
+        HideFilter();
     }
 
     private void ApplyFilter(string filterText)
@@ -1711,9 +1749,17 @@ public class DataGridViewFilteredHeaderCell : DataGridViewColumnHeaderCell
         // Рисуем кнопку фильтра в заголовке (увеличиваем размер)
         var buttonRect = new Rectangle(cellBounds.Right - 35, cellBounds.Top + 2, 30, 20);
 
-        // Рисуем фон кнопки
-        graphics.FillRectangle(Brushes.LightBlue, buttonRect);
-        graphics.DrawRectangle(Pens.DarkBlue, buttonRect);
+        // Рисуем фон кнопки (меняем цвет если фильтр активен)
+        if (isFilterVisible && !string.IsNullOrEmpty(filterTextBox.Text))
+        {
+            graphics.FillRectangle(Brushes.LightGreen, buttonRect);
+            graphics.DrawRectangle(Pens.DarkGreen, buttonRect);
+        }
+        else
+        {
+            graphics.FillRectangle(Brushes.LightBlue, buttonRect);
+            graphics.DrawRectangle(Pens.DarkBlue, buttonRect);
+        }
 
         // Рисуем иконку фильтра
         using (var font = new Font("Arial", 10))
@@ -1721,10 +1767,13 @@ public class DataGridViewFilteredHeaderCell : DataGridViewColumnHeaderCell
             graphics.DrawString("🔍", font, Brushes.Black, buttonRect, new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center });
         }
 
-        // Если фильтр активен, рисуем индикатор
-        if (isFilterVisible)
+        // Если фильтр активен и есть текст, показываем индикатор
+        if (isFilterVisible && !string.IsNullOrEmpty(filterTextBox.Text))
         {
-            graphics.FillEllipse(Brushes.Red, new Rectangle(cellBounds.Right - 8, cellBounds.Top + 2, 6, 6));
+            // Рисуем маленький индикатор в левом верхнем углу кнопки
+            var indicatorRect = new Rectangle(buttonRect.X + 2, buttonRect.Y + 2, 6, 6);
+            graphics.FillEllipse(Brushes.Orange, indicatorRect);
+            graphics.DrawEllipse(Pens.DarkOrange, indicatorRect);
         }
     }
 }
