@@ -1144,13 +1144,8 @@ public class RankSystemForm : Form
     private Label lblCoins = new Label();
     private Label lblGameWhenFollow = new Label();
     private UserData selectedUser = null;
-    private List<UserData> allUsers = new List<UserData>();
+    internal List<UserData> allUsers = new List<UserData>();
     private BindingList<UserData> bindingUsers = new BindingList<UserData>();
-    private string lastSortColumn = null;
-    private bool lastSortAsc = true;
-    private TextBox[] columnFilters;
-    private string[] columnNames = new[] { "UUID", "Service", "ServiceUserId", "UserName", "WatchTime", "FollowDate", "MessageCount", "Coins", "GameWhenFollow" };
-    private Panel panelFilters = new Panel();
 
     public RankSystemForm()
     {
@@ -1165,30 +1160,9 @@ public class RankSystemForm : Form
         this.MinimumSize = new Size(1240, 600);
         this.StartPosition = FormStartPosition.CenterScreen;
 
-        // Панель для фильтров
-        panelFilters.Parent = this;
-        panelFilters.Location = new Point(10, 10);
-        panelFilters.Height = 22;
-        panelFilters.Width = 800;
-        panelFilters.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-        this.Controls.Add(panelFilters);
-
-        // Фильтры по колонкам
-        columnFilters = new TextBox[columnNames.Length];
-        for (int i = 0; i < columnNames.Length; i++)
-        {
-            var tb = new TextBox();
-            tb.Parent = panelFilters;
-            tb.Tag = columnNames[i];
-            tb.TextChanged += ColumnFilter_TextChanged;
-            tb.Height = 20;
-            tb.Visible = true;
-            columnFilters[i] = tb;
-            panelFilters.Controls.Add(tb);
-        }
-
-        usersGrid.Location = new Point(10, panelFilters.Location.Y + panelFilters.Height + 2);
-        usersGrid.Size = new Size(800, 468);
+        // Настраиваем DataGridView
+        usersGrid.Location = new Point(10, 10);
+        usersGrid.Size = new Size(800, 480);
         usersGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         usersGrid.MultiSelect = false;
         usersGrid.ReadOnly = true;
@@ -1197,23 +1171,28 @@ public class RankSystemForm : Form
         usersGrid.AllowUserToDeleteRows = false;
         usersGrid.DataSource = null;
         usersGrid.CellClick += UsersGrid_CellClick;
+        usersGrid.CellMouseClick += UsersGrid_CellMouseClick;
         usersGrid.ColumnHeaderMouseClick += UsersGrid_ColumnHeaderMouseClick;
         usersGrid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-        usersGrid.ColumnWidthChanged += (s, e) => PositionColumnFilters();
-        usersGrid.Scroll += (s, e) => PositionColumnFilters();
-        usersGrid.SizeChanged += (s, e) => PositionColumnFilters();
-        this.Resize += (s, e) => PositionColumnFilters();
 
-        usersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "UUID", DataPropertyName = "UUID", Width = 120, SortMode = DataGridViewColumnSortMode.Automatic });
-        usersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Service", DataPropertyName = "Service", Width = 80, SortMode = DataGridViewColumnSortMode.Automatic });
-        usersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "ServiceUserId", DataPropertyName = "ServiceUserId", Width = 120, SortMode = DataGridViewColumnSortMode.Automatic });
-        usersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "UserName", DataPropertyName = "UserName", Width = 120, SortMode = DataGridViewColumnSortMode.Automatic });
-        usersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "WatchTime", DataPropertyName = "WatchTime", Width = 80, SortMode = DataGridViewColumnSortMode.Automatic });
-        usersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "FollowDate", DataPropertyName = "FollowDate", Width = 140, SortMode = DataGridViewColumnSortMode.Automatic });
-        usersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "MessageCount", DataPropertyName = "MessageCount", Width = 80, SortMode = DataGridViewColumnSortMode.Automatic });
-        usersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "Coins", DataPropertyName = "Coins", Width = 80, SortMode = DataGridViewColumnSortMode.Automatic });
-        usersGrid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "GameWhenFollow", DataPropertyName = "GameWhenFollow", Width = 120, SortMode = DataGridViewColumnSortMode.Automatic });
+        // Добавляем обработчики событий для обновления позиции фильтров
+        usersGrid.ColumnWidthChanged += (s, e) => UpdateAllFilterPositions();
+        usersGrid.Scroll += (s, e) => UpdateAllFilterPositions();
+        usersGrid.SizeChanged += (s, e) => UpdateAllFilterPositions();
+        this.Resize += (s, e) => UpdateAllFilterPositions();
 
+        // Добавляем кастомные колонки с фильтрацией
+        usersGrid.Columns.Add(new DataGridViewFilteredTextBoxColumn(this) { HeaderText = "UUID", DataPropertyName = "UUID", Width = 120, SortMode = DataGridViewColumnSortMode.Automatic });
+        usersGrid.Columns.Add(new DataGridViewFilteredTextBoxColumn(this) { HeaderText = "Service", DataPropertyName = "Service", Width = 80, SortMode = DataGridViewColumnSortMode.Automatic });
+        usersGrid.Columns.Add(new DataGridViewFilteredTextBoxColumn(this) { HeaderText = "ServiceUserId", DataPropertyName = "ServiceUserId", Width = 120, SortMode = DataGridViewColumnSortMode.Automatic });
+        usersGrid.Columns.Add(new DataGridViewFilteredTextBoxColumn(this) { HeaderText = "UserName", DataPropertyName = "UserName", Width = 120, SortMode = DataGridViewColumnSortMode.Automatic });
+        usersGrid.Columns.Add(new DataGridViewFilteredTextBoxColumn(this) { HeaderText = "WatchTime", DataPropertyName = "WatchTime", Width = 80, SortMode = DataGridViewColumnSortMode.Automatic });
+        usersGrid.Columns.Add(new DataGridViewFilteredTextBoxColumn(this) { HeaderText = "FollowDate", DataPropertyName = "FollowDate", Width = 140, SortMode = DataGridViewColumnSortMode.Automatic });
+        usersGrid.Columns.Add(new DataGridViewFilteredTextBoxColumn(this) { HeaderText = "MessageCount", DataPropertyName = "MessageCount", Width = 80, SortMode = DataGridViewColumnSortMode.Automatic });
+        usersGrid.Columns.Add(new DataGridViewFilteredTextBoxColumn(this) { HeaderText = "Coins", DataPropertyName = "Coins", Width = 80, SortMode = DataGridViewColumnSortMode.Automatic });
+        usersGrid.Columns.Add(new DataGridViewFilteredTextBoxColumn(this) { HeaderText = "GameWhenFollow", DataPropertyName = "GameWhenFollow", Width = 120, SortMode = DataGridViewColumnSortMode.Automatic });
+
+        // Настраиваем правую панель с полями редактирования
         int left = 820, top = 40, spacing = 28, labelWidth = 110, boxWidth = 240;
         lblUUID.Text = "UUID:"; lblUUID.SetBounds(left, top, labelWidth, 20); lblUUID.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         txtUUID.SetBounds(left + labelWidth, top, boxWidth, 20); txtUUID.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -1255,8 +1234,6 @@ public class RankSystemForm : Form
         this.Controls.Add(lblGameWhenFollow); this.Controls.Add(txtGameWhenFollow);
         this.Controls.Add(btnAdd); this.Controls.Add(btnSave); this.Controls.Add(btnRefresh); this.Controls.Add(btnDelete);
 
-        PositionColumnFilters();
-
         btnAdd.Click += BtnAdd_Click;
         btnSave.Click += BtnSave_Click;
         btnRefresh.Click += BtnRefresh_Click;
@@ -1279,6 +1256,62 @@ public class RankSystemForm : Form
             {
                 selectedUser = user;
                 FillUserFields(user);
+            }
+        }
+    }
+
+    private void UsersGrid_CellMouseClick(object sender, DataGridViewCellMouseEventArgs e)
+    {
+        // Обрабатываем клики по заголовкам (RowIndex = -1)
+        if (e.RowIndex == -1 && e.ColumnIndex >= 0)
+        {
+            System.Diagnostics.Debug.WriteLine($"Header clicked: Column {e.ColumnIndex}, X={e.X}, Y={e.Y}");
+
+            // Проверяем, была ли нажата кнопка фильтра
+            var column = usersGrid.Columns[e.ColumnIndex];
+            if (column is DataGridViewFilteredTextBoxColumn filteredColumn)
+            {
+                var cellBounds = usersGrid.GetCellDisplayRectangle(e.ColumnIndex, -1, true);
+                var rightArea = cellBounds.Width - 35; // Правая область 35 пикселей (размер кнопки)
+
+                if (e.X > rightArea)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Filter button clicked via CellMouseClick for column {column.DataPropertyName}");
+                    filteredColumn.ShowFilter();
+                }
+            }
+        }
+        // Обрабатываем клики по ячейкам данных
+        else if (e.RowIndex >= 0)
+        {
+            var user = usersGrid.Rows[e.RowIndex].DataBoundItem as UserData;
+            if (user != null)
+            {
+                selectedUser = user;
+                FillUserFields(user);
+            }
+        }
+    }
+
+    private void UsersGrid_ColumnHeaderMouseClick(object sender, DataGridViewCellMouseEventArgs e)
+    {
+        // Обрабатываем клики по заголовкам колонок
+        if (e.RowIndex == -1 && e.ColumnIndex >= 0)
+        {
+            System.Diagnostics.Debug.WriteLine($"Header clicked: Column {e.ColumnIndex}, X={e.X}, Y={e.Y}");
+
+            // Проверяем, была ли нажата кнопка фильтра
+            var column = usersGrid.Columns[e.ColumnIndex];
+            if (column is DataGridViewFilteredTextBoxColumn filteredColumn)
+            {
+                var cellBounds = usersGrid.GetCellDisplayRectangle(e.ColumnIndex, -1, true);
+                var rightArea = cellBounds.Width - 35; // Правая область 35 пикселей (размер кнопки)
+
+                if (e.X > rightArea)
+                {
+                    System.Diagnostics.Debug.WriteLine($"Filter button clicked via ColumnHeaderMouseClick for column {column.DataPropertyName}");
+                    filteredColumn.ShowFilter();
+                }
             }
         }
     }
@@ -1368,71 +1401,330 @@ public class RankSystemForm : Form
 
     private void ClearAllFilters()
     {
-        foreach (var tb in columnFilters)
-            tb.Text = "";
-        ApplyColumnFilters();
-    }
-
-
-
-    private void UsersGrid_ColumnHeaderMouseClick(object sender, DataGridViewCellMouseEventArgs e)
-    {
-        string column = usersGrid.Columns[e.ColumnIndex].DataPropertyName;
-        bool asc = lastSortColumn != column ? true : !lastSortAsc;
-        lastSortColumn = column;
-        lastSortAsc = asc;
-
-        var list = (usersGrid.DataSource as IEnumerable<UserData>)?.ToList() ?? new List<UserData>();
-        var prop = typeof(UserData).GetProperty(column);
-        if (prop != null)
+        foreach (DataGridViewColumn column in usersGrid.Columns)
         {
-            if (asc)
-                list = list.OrderBy(x => prop.GetValue(x, null)).ToList();
-            else
-                list = list.OrderByDescending(x => prop.GetValue(x, null)).ToList();
-            usersGrid.DataSource = new BindingList<UserData>(list);
-        }
-    }
-
-    private void ColumnFilter_TextChanged(object sender, EventArgs e)
-    {
-        ApplyColumnFilters();
-    }
-
-    private void ApplyColumnFilters()
-    {
-        IEnumerable<UserData> filtered = allUsers;
-        for (int i = 0; i < columnFilters.Length; i++)
-        {
-            string filter = columnFilters[i].Text.Trim().ToLowerInvariant();
-            if (!string.IsNullOrEmpty(filter))
+            if (column is DataGridViewFilteredTextBoxColumn filteredColumn)
             {
-                string col = columnNames[i];
-                filtered = filtered.Where(u =>
-                {
-                    var prop = typeof(UserData).GetProperty(col);
-                    var val = prop?.GetValue(u, null);
-                    if (val == null) return false;
-                    if (val is DateTime dt)
-                        return dt != DateTime.MinValue && dt.ToString("o").ToLowerInvariant().Contains(filter);
-                    return val.ToString().ToLowerInvariant().Contains(filter);
-                });
+                filteredColumn.ClearFilter();
             }
         }
-        usersGrid.DataSource = new BindingList<UserData>(filtered.ToList());
     }
 
-    private void PositionColumnFilters()
+    private void UpdateAllFilterPositions()
     {
-        int x = usersGrid.RowHeadersVisible ? usersGrid.RowHeadersWidth - usersGrid.HorizontalScrollingOffset : -usersGrid.HorizontalScrollingOffset;
-        for (int i = 0; i < usersGrid.Columns.Count; i++)
+        foreach (DataGridViewColumn column in usersGrid.Columns)
         {
-            var col = usersGrid.Columns[i];
-            var tb = columnFilters[i];
-            tb.SetBounds(x, 0, col.Width, panelFilters.Height - 2);
-            tb.Visible = col.Visible;
-            x += col.Width;
+            if (column is DataGridViewFilteredTextBoxColumn filteredColumn)
+            {
+                filteredColumn.UpdateFilterPosition();
+            }
         }
-        panelFilters.Width = usersGrid.Width;
+    }
+}
+
+// Кастомная колонка с фильтрацией в заголовке
+public class DataGridViewFilteredTextBoxColumn : DataGridViewTextBoxColumn
+{
+    private TextBox filterTextBox;
+    private bool isFilterVisible = false;
+    private RankSystemForm parentForm;
+
+    public DataGridViewFilteredTextBoxColumn(RankSystemForm form = null)
+    {
+        parentForm = form;
+        // Создаем кастомную ячейку заголовка
+        HeaderCell = new DataGridViewFilteredHeaderCell(this);
+    }
+
+    public void SetParentForm(RankSystemForm form)
+    {
+        parentForm = form;
+        var headerCell = HeaderCell as DataGridViewFilteredHeaderCell;
+        headerCell?.SetParentForm(form);
+    }
+
+    public void ShowFilter()
+    {
+        if (!isFilterVisible)
+        {
+            var headerCell = HeaderCell as DataGridViewFilteredHeaderCell;
+            headerCell?.ShowFilter();
+            isFilterVisible = true;
+        }
+    }
+
+    public void HideFilter()
+    {
+        if (isFilterVisible)
+        {
+            var headerCell = HeaderCell as DataGridViewFilteredHeaderCell;
+            headerCell?.HideFilter();
+            isFilterVisible = false;
+        }
+    }
+
+    public void ClearFilter()
+    {
+        var headerCell = HeaderCell as DataGridViewFilteredHeaderCell;
+        headerCell?.ClearFilter();
+    }
+
+    public string GetFilterText()
+    {
+        var headerCell = HeaderCell as DataGridViewFilteredHeaderCell;
+        return headerCell?.GetFilterText() ?? "";
+    }
+
+    public void UpdateFilterPosition()
+    {
+        var headerCell = HeaderCell as DataGridViewFilteredHeaderCell;
+        headerCell?.UpdateFilterPosition();
+    }
+}
+
+// Кастомная ячейка заголовка с фильтром
+public class DataGridViewFilteredHeaderCell : DataGridViewColumnHeaderCell
+{
+    private TextBox filterTextBox;
+    private Button filterButton;
+    private Panel filterPanel;
+    private DataGridViewFilteredTextBoxColumn parentColumn;
+    private bool isFilterVisible = false;
+    private RankSystemForm parentForm;
+
+    public DataGridViewFilteredHeaderCell(DataGridViewFilteredTextBoxColumn column)
+    {
+        parentColumn = column;
+        InitializeFilterControls();
+    }
+
+    public void SetParentForm(RankSystemForm form)
+    {
+        parentForm = form;
+    }
+
+    private void InitializeFilterControls()
+    {
+        // Создаем панель для фильтра
+        filterPanel = new Panel();
+        filterPanel.Visible = false;
+        filterPanel.BackColor = Color.White;
+        filterPanel.BorderStyle = BorderStyle.FixedSingle;
+
+        // Создаем кнопку фильтра
+        filterButton = new Button();
+        filterButton.Text = "🔍";
+        filterButton.Size = new Size(20, 20);
+        filterButton.Click += FilterButton_Click;
+        filterButton.FlatStyle = FlatStyle.Flat;
+        filterButton.BackColor = Color.Transparent;
+
+        // Создаем текстовое поле фильтра
+        filterTextBox = new TextBox();
+        filterTextBox.Size = new Size(80, 20);
+        filterTextBox.TextChanged += FilterTextBox_TextChanged;
+        filterTextBox.KeyDown += FilterTextBox_KeyDown;
+
+        // Размещаем элементы
+        filterPanel.Controls.Add(filterButton);
+        filterPanel.Controls.Add(filterTextBox);
+        filterButton.Location = new Point(0, 0);
+        filterTextBox.Location = new Point(25, 0);
+        filterPanel.Size = new Size(105, 22);
+
+        // Добавляем панель к DataGridView
+        if (DataGridView != null)
+        {
+            DataGridView.Controls.Add(filterPanel);
+        }
+    }
+
+    protected override void OnDataGridViewChanged()
+    {
+        base.OnDataGridViewChanged();
+        if (DataGridView != null)
+        {
+            DataGridView.Controls.Add(filterPanel);
+            UpdateFilterPosition();
+        }
+    }
+
+    // Обработка клика по заголовку
+    protected override void OnMouseClick(DataGridViewCellMouseEventArgs e)
+    {
+        base.OnMouseClick(e);
+
+        // Упрощенная логика: если клик в правой части заголовка, показываем фильтр
+        var cellBounds = DataGridView.GetCellDisplayRectangle(ColumnIndex, -1, true);
+        var rightArea = cellBounds.Width - 35; // Правая область 35 пикселей (размер кнопки)
+
+        if (e.X > rightArea)
+        {
+            System.Diagnostics.Debug.WriteLine($"Filter button clicked for column {parentColumn.DataPropertyName}");
+            ToggleFilter();
+        }
+    }
+
+    // Добавляем обработку двойного клика
+    protected override void OnMouseDoubleClick(DataGridViewCellMouseEventArgs e)
+    {
+        base.OnMouseDoubleClick(e);
+
+        // Проверяем, был ли клик в области кнопки фильтра
+        var cellBounds = DataGridView.GetCellDisplayRectangle(ColumnIndex, -1, true);
+        var relativeX = e.X - (cellBounds.X + cellBounds.Width - 25);
+        var relativeY = e.Y - (cellBounds.Y + 2);
+
+        if (relativeX >= 0 && relativeX <= 20 && relativeY >= 0 && relativeY <= 20)
+        {
+            System.Diagnostics.Debug.WriteLine($"Filter button double-clicked for column {parentColumn.DataPropertyName}");
+            ToggleFilter();
+        }
+    }
+
+    private void FilterButton_Click(object sender, EventArgs e)
+    {
+        ToggleFilter();
+    }
+
+    private void ToggleFilter()
+    {
+        if (isFilterVisible)
+        {
+            HideFilter();
+        }
+        else
+        {
+            ShowFilter();
+        }
+    }
+
+    public void ShowFilter()
+    {
+        filterPanel.Visible = true;
+        UpdateFilterPosition();
+        filterTextBox.Focus();
+        isFilterVisible = true;
+    }
+
+    public void HideFilter()
+    {
+        filterPanel.Visible = false;
+        isFilterVisible = false;
+    }
+
+    public void ClearFilter()
+    {
+        filterTextBox.Text = "";
+        ApplyFilter("");
+    }
+
+    public string GetFilterText()
+    {
+        return filterTextBox.Text;
+    }
+
+    private void FilterTextBox_TextChanged(object sender, EventArgs e)
+    {
+        ApplyFilter(filterTextBox.Text);
+    }
+
+    private void FilterTextBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.KeyCode == Keys.Escape)
+        {
+            HideFilter();
+        }
+    }
+
+    private void ApplyFilter(string filterText)
+    {
+        if (DataGridView?.DataSource is BindingList<UserData> bindingList)
+        {
+            // Получаем оригинальный список данных
+            var originalList = parentForm?.allUsers ?? DatabaseManager.GetUserData();
+
+            // Применяем фильтры от всех колонок
+            var filteredList = originalList.Where(user =>
+            {
+                // Проверяем фильтр для текущей колонки
+                var columnName = parentColumn.DataPropertyName;
+                var property = typeof(UserData).GetProperty(columnName);
+                if (property == null) return true;
+
+                var value = property.GetValue(user);
+                if (value == null) return false;
+
+                if (string.IsNullOrEmpty(filterText)) return true;
+
+                var valueString = value.ToString().ToLowerInvariant();
+                return valueString.Contains(filterText.ToLowerInvariant());
+            }).ToList();
+
+            // Применяем фильтры от других колонок
+            foreach (DataGridViewColumn column in DataGridView.Columns)
+            {
+                if (column is DataGridViewFilteredTextBoxColumn otherColumn && otherColumn != parentColumn)
+                {
+                    var otherFilterText = otherColumn.GetFilterText();
+                    if (!string.IsNullOrEmpty(otherFilterText))
+                    {
+                        var otherColumnName = otherColumn.DataPropertyName;
+                        var otherProperty = typeof(UserData).GetProperty(otherColumnName);
+                        if (otherProperty != null)
+                        {
+                            filteredList = filteredList.Where(user =>
+                            {
+                                var value = otherProperty.GetValue(user);
+                                if (value == null) return false;
+                                var valueString = value.ToString().ToLowerInvariant();
+                                return valueString.Contains(otherFilterText.ToLowerInvariant());
+                            }).ToList();
+                        }
+                    }
+                }
+            }
+
+            // Обновляем DataSource
+            DataGridView.DataSource = new BindingList<UserData>(filteredList);
+        }
+    }
+
+    public void UpdateFilterPosition()
+    {
+        if (DataGridView != null && parentColumn != null)
+        {
+            var columnIndex = parentColumn.Index;
+            var headerBounds = DataGridView.GetCellDisplayRectangle(columnIndex, -1, true);
+
+            filterPanel.Location = new Point(
+                headerBounds.X + headerBounds.Width - filterPanel.Width - 5,
+                headerBounds.Y + headerBounds.Height - filterPanel.Height - 2
+            );
+        }
+    }
+
+    protected override void Paint(Graphics graphics, Rectangle clipBounds, Rectangle cellBounds, int rowIndex, DataGridViewElementStates cellState, object value, object formattedValue, string errorText, DataGridViewCellStyle cellStyle, DataGridViewAdvancedBorderStyle advancedBorderStyle, DataGridViewPaintParts paintParts)
+    {
+        base.Paint(graphics, clipBounds, cellBounds, rowIndex, cellState, value, formattedValue, errorText, cellStyle, advancedBorderStyle, paintParts);
+
+        // Рисуем кнопку фильтра в заголовке (увеличиваем размер)
+        var buttonRect = new Rectangle(cellBounds.Right - 35, cellBounds.Top + 2, 30, 20);
+
+        // Рисуем фон кнопки
+        graphics.FillRectangle(Brushes.LightBlue, buttonRect);
+        graphics.DrawRectangle(Pens.DarkBlue, buttonRect);
+
+        // Рисуем иконку фильтра
+        using (var font = new Font("Arial", 10))
+        {
+            graphics.DrawString("🔍", font, Brushes.Black, buttonRect, new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center });
+        }
+
+        // Если фильтр активен, рисуем индикатор
+        if (isFilterVisible)
+        {
+            graphics.FillEllipse(Brushes.Red, new Rectangle(cellBounds.Right - 8, cellBounds.Top + 2, 6, 6));
+        }
     }
 }
