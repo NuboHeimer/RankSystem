@@ -1144,9 +1144,6 @@ public class RankSystemForm : Form
     private Label lblCoins = new Label();
     private Label lblGameWhenFollow = new Label();
     private UserData selectedUser = null;
-    private TextBox txtSearch = new TextBox();
-    private Button btnSearch = new Button();
-    private Button btnClearSearch = new Button();
     private List<UserData> allUsers = new List<UserData>();
     private BindingList<UserData> bindingUsers = new BindingList<UserData>();
     private string lastSortColumn = null;
@@ -1168,21 +1165,9 @@ public class RankSystemForm : Form
         this.MinimumSize = new Size(1240, 600);
         this.StartPosition = FormStartPosition.CenterScreen;
 
-        txtSearch.SetBounds(10, 10, 300, 24);
-        txtSearch.Anchor = AnchorStyles.Top | AnchorStyles.Left;
-        txtSearch.KeyDown += TxtSearch_KeyDown;
-        btnSearch.Text = "Поиск";
-        btnSearch.SetBounds(320, 10, 70, 24);
-        btnSearch.Anchor = AnchorStyles.Top | AnchorStyles.Left;
-        btnSearch.Click += BtnSearch_Click;
-        btnClearSearch.Text = "Сбросить";
-        btnClearSearch.SetBounds(400, 10, 80, 24);
-        btnClearSearch.Anchor = AnchorStyles.Top | AnchorStyles.Left;
-        btnClearSearch.Click += BtnClearSearch_Click;
-
         // Панель для фильтров
         panelFilters.Parent = this;
-        panelFilters.Location = new Point(10, 60);
+        panelFilters.Location = new Point(10, 10);
         panelFilters.Height = 22;
         panelFilters.Width = 800;
         panelFilters.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
@@ -1258,9 +1243,6 @@ public class RankSystemForm : Form
         btnDelete.Text = "Delete";
         btnDelete.SetBounds(left, top + 80, 170, 30); btnDelete.Anchor = AnchorStyles.Top | AnchorStyles.Right;
 
-        this.Controls.Add(txtSearch);
-        this.Controls.Add(btnSearch);
-        this.Controls.Add(btnClearSearch);
         this.Controls.Add(usersGrid);
         this.Controls.Add(lblUUID); this.Controls.Add(txtUUID);
         this.Controls.Add(lblService); this.Controls.Add(txtService);
@@ -1386,55 +1368,12 @@ public class RankSystemForm : Form
 
     private void ClearAllFilters()
     {
-        txtSearch.Text = "";
         foreach (var tb in columnFilters)
             tb.Text = "";
-        ApplySearch("");
         ApplyColumnFilters();
     }
 
-    private void ApplySearch(string search)
-    {
-        if (string.IsNullOrWhiteSpace(search))
-        {
-            usersGrid.DataSource = bindingUsers;
-            return;
-        }
-        string s = search.ToLowerInvariant();
-        var filtered = allUsers.Where(u =>
-            (u.UUID != null && u.UUID.ToLowerInvariant().Contains(s)) ||
-            (u.Service != null && u.Service.ToLowerInvariant().Contains(s)) ||
-            (u.ServiceUserId != null && u.ServiceUserId.ToLowerInvariant().Contains(s)) ||
-            (u.UserName != null && u.UserName.ToLowerInvariant().Contains(s)) ||
-            u.WatchTime.ToString().Contains(s) ||
-            (u.FollowDate != DateTime.MinValue && u.FollowDate.ToString("o").ToLowerInvariant().Contains(s)) ||
-            u.MessageCount.ToString().Contains(s) ||
-            u.Coins.ToString().Contains(s) ||
-            (u.GameWhenFollow != null && u.GameWhenFollow.ToLowerInvariant().Contains(s))
-        ).ToList();
-        usersGrid.DataSource = new BindingList<UserData>(filtered);
-    }
 
-    private void BtnSearch_Click(object sender, EventArgs e)
-    {
-        ApplySearch(txtSearch.Text);
-    }
-
-    private void BtnClearSearch_Click(object sender, EventArgs e)
-    {
-        txtSearch.Text = "";
-        ApplySearch("");
-    }
-
-    private void TxtSearch_KeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.KeyCode == Keys.Enter)
-        {
-            ApplySearch(txtSearch.Text);
-            e.Handled = true;
-            e.SuppressKeyPress = true;
-        }
-    }
 
     private void UsersGrid_ColumnHeaderMouseClick(object sender, DataGridViewCellMouseEventArgs e)
     {
