@@ -54,8 +54,15 @@ public class CPHInline
             var existingUser = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
             if (existingUser is not null)
             {
+                // Сохраняем актуальное имя пользователя из аргументов
+                string newUserName = user.UserName;
                 user = existingUser;
                 user.MessageCount += 1;
+                // Обновляем имя пользователя, если оно изменилось
+                if (!string.IsNullOrEmpty(newUserName) && !string.Equals(user.UserName, newUserName, StringComparison.OrdinalIgnoreCase))
+                {
+                    user.UserName = newUserName;
+                }
             }
             else
             {
@@ -102,7 +109,16 @@ public class CPHInline
                 var user = CreateUserFormArgs(service, userName, userId);
                 var existingUser = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
                 if (existingUser is not null)
+                {
+                    // Сохраняем актуальное имя пользователя из аргументов
+                    string newUserName = user.UserName;
                     user = existingUser;
+                    // Обновляем имя пользователя, если оно изменилось
+                    if (!string.IsNullOrEmpty(newUserName) && !string.Equals(user.UserName, newUserName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        user.UserName = newUserName;
+                    }
+                }
                 if (!CPH.TryGetArg("coinsToAdd", out long coinsToAdd))
                     coinsToAdd = DEFAULT_COINS_TO_ADD;
                 user.Coins += coinsToAdd;
@@ -127,7 +143,16 @@ public class CPHInline
             var user = CreateUserFormArgs(service);
             var existingUser = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
             if (existingUser is not null)
+            {
+                // Сохраняем актуальное имя пользователя из аргументов
+                string newUserName = user.UserName;
                 user = existingUser;
+                // Обновляем имя пользователя, если оно изменилось
+                if (!string.IsNullOrEmpty(newUserName) && !string.Equals(user.UserName, newUserName, StringComparison.OrdinalIgnoreCase))
+                {
+                    user.UserName = newUserName;
+                }
+            }
             if (!CPH.TryGetArg("coinsToAdd", out long coinsToAdd))
                 coinsToAdd = DEFAULT_COINS_TO_ADD;
             if (CPH.TryGetArg("game", out string game))
@@ -206,7 +231,7 @@ public class CPHInline
         }
     }
 
-    public bool AddCoins(long? coinsToAdd = null)
+    public bool AddCoins()
     {
         try
         {
@@ -214,11 +239,20 @@ public class CPHInline
             var user = CreateUserFormArgs(service);
             var existingUser = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
             if (existingUser is not null)
+            {
+                // Сохраняем актуальное имя пользователя из аргументов
+                string newUserName = user.UserName;
                 user = existingUser;
+                // Обновляем имя пользователя, если оно изменилось
+                if (!string.IsNullOrEmpty(newUserName) && !string.Equals(user.UserName, newUserName, StringComparison.OrdinalIgnoreCase))
+                {
+                    user.UserName = newUserName;
+                }
+            }
             long coinsFromArgs = DEFAULT_COINS_TO_ADD;
-            if (!coinsToAdd.HasValue && !CPH.TryGetArg("coinsToAdd", out coinsFromArgs))
+            if (!CPH.TryGetArg("coinsToAdd", out coinsFromArgs))
                 coinsFromArgs = DEFAULT_COINS_TO_ADD;
-            user.Coins += coinsToAdd ?? coinsFromArgs;
+            user.Coins += coinsFromArgs;
             DatabaseManager.UpsertUser(user);
             return true;
         }
@@ -263,7 +297,8 @@ public class CPHInline
                 }
                 else
                 {
-                    AddCoins(-actionCurrency);
+                    CPH.SetArgument("coinsToAdd", -actionCurrency);
+                    AddCoins();
                     return true;
                 }
             }
@@ -349,14 +384,34 @@ public class CPHInline
         }
 
         // Если UserName не передан, берем из аргументов
-        if (string.IsNullOrEmpty(userName) && args.ContainsKey("userName"))
+        if (string.IsNullOrEmpty(userName))
         {
-            userName = args["userName"].ToString().ToLower();
+            if (args.ContainsKey("userName"))
+            {
+                userName = args["userName"].ToString().ToLower();
+            }
+            else if (args.ContainsKey("users"))
+            {
+                // Пытаемся получить имя из списка пользователей (для случаев с одним пользователем)
+                try
+                {
+                    var usersList = args["users"] as List<Dictionary<string, object>>;
+                    if (usersList != null && usersList.Count > 0 && usersList[0].ContainsKey("userName"))
+                    {
+                        userName = usersList[0]["userName"].ToString().ToLower();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    CPH.LogWarn($"[RankSystem] Failed to extract userName from users list: {ex.Message}");
+                }
+            }
         }
 
         // Если userName все еще null, используем временное имя
         if (string.IsNullOrEmpty(userName))
         {
+            CPH.LogWarn($"[RankSystem] UserName is NULL or empty for service {service}, userId {serviceUserId}. Using temporary name.");
             userName = $"user_{serviceUserId}";
         }
 
@@ -774,9 +829,13 @@ public static class DatabaseManager
         }
 
         // Если изменился никнейм, добавляем запись в историю после завершения основной транзакции
-        if (oldUserName != null && uuid != null)
+        if (oldUserName != null && uuid != null && !string.IsNullOrEmpty(user.UserName))
         {
-            AddUserNameHistory(uuid, oldUserName, user.UserName);
+            // Дополнительная проверка: убеждаемся, что имена действительно разные
+            if (!string.Equals(oldUserName, user.UserName, StringComparison.OrdinalIgnoreCase))
+            {
+                AddUserNameHistory(uuid, oldUserName, user.UserName);
+            }
         }
     }
 
