@@ -1301,9 +1301,38 @@ public class RankSystemForm : Form
 
     private void LoadUsers()
     {
+        // Загружаем данные из базы
         allUsers = DatabaseManager.GetUserData();
+
+        // Создаем новый BindingList с загруженными данными
         bindingUsers = new BindingList<UserData>(allUsers);
+
+        // Обновляем DataSource
         usersGrid.DataSource = bindingUsers;
+
+        // Убеждаемся, что все записи отображаются
+        usersGrid.Refresh();
+
+        // Обновляем заголовок формы
+        UpdateFormTitle();
+
+        // Логируем количество загруженных записей для отладки
+        System.Diagnostics.Debug.WriteLine($"[RankSystem] Loaded {allUsers.Count} users from database");
+    }
+
+    internal void UpdateFormTitle()
+    {
+        int totalCount = allUsers.Count;
+        int filteredCount = GetFilteredCount();
+        bool hasFilters = HasActiveFilters();
+
+        string title = $"RankSystem Database Editor - {filteredCount} of {totalCount} users";
+        if (hasFilters)
+        {
+            title += " (filtered)";
+        }
+
+        this.Text = title;
     }
 
     private void UsersGrid_CellClick(object sender, DataGridViewCellEventArgs e)
@@ -1416,15 +1445,32 @@ public class RankSystemForm : Form
     {
         var user = GetUserFromFields();
         DatabaseManager.UpsertUser(user);
+
+        // Обновляем данные и восстанавливаем полный список
         LoadUsers();
         ClearAllFilters();
+
         MessageBox.Show("User saved.");
     }
 
     private void BtnRefresh_Click(object sender, EventArgs e)
     {
-        LoadUsers();
+        // Сначала очищаем все фильтры
         ClearAllFilters();
+
+        // Затем загружаем данные заново
+        LoadUsers();
+
+        // Убеждаемся, что все данные отображаются
+        if (usersGrid.DataSource is BindingList<UserData> bindingList)
+        {
+            // Проверяем, что количество отображаемых записей соответствует общему количеству
+            if (bindingList.Count != allUsers.Count)
+            {
+                // Если количество не совпадает, принудительно обновляем DataSource
+                usersGrid.DataSource = new BindingList<UserData>(allUsers);
+            }
+        }
     }
 
     private void BtnDelete_Click(object sender, EventArgs e)
@@ -1438,6 +1484,8 @@ public class RankSystemForm : Form
         if (result == DialogResult.Yes)
         {
             DatabaseManager.DeleteUser(selectedUser);
+
+            // Обновляем данные и восстанавливаем полный список
             LoadUsers();
             ClearAllFilters();
             ClearUserFields();
@@ -1460,6 +1508,7 @@ public class RankSystemForm : Form
 
     private void ClearAllFilters()
     {
+        // Очищаем фильтры во всех колонках
         foreach (DataGridViewColumn column in usersGrid.Columns)
         {
             if (column is DataGridViewFilteredTextBoxColumn filteredColumn)
@@ -1467,6 +1516,23 @@ public class RankSystemForm : Form
                 filteredColumn.ClearFilter();
             }
         }
+
+        // Восстанавливаем отображение всех данных
+        if (usersGrid.DataSource is BindingList<UserData> currentBindingList)
+        {
+            // Если текущий список не содержит все данные, восстанавливаем его
+            if (currentBindingList.Count != allUsers.Count)
+            {
+                usersGrid.DataSource = new BindingList<UserData>(allUsers);
+                System.Diagnostics.Debug.WriteLine($"[RankSystem] Restored full data view: {allUsers.Count} users");
+            }
+        }
+
+        // Обновляем отображение
+        usersGrid.Refresh();
+
+        // Обновляем заголовок формы
+        UpdateFormTitle();
     }
 
     private void UpdateAllFilterPositions()
@@ -1478,6 +1544,28 @@ public class RankSystemForm : Form
                 filteredColumn.UpdateFilterPosition();
             }
         }
+    }
+
+    private bool HasActiveFilters()
+    {
+        foreach (DataGridViewColumn column in usersGrid.Columns)
+        {
+            if (column is DataGridViewFilteredTextBoxColumn filteredColumn)
+            {
+                if (!string.IsNullOrEmpty(filteredColumn.GetFilterText()))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    private int GetFilteredCount()
+    {
+        if (usersGrid.DataSource is BindingList<UserData> bindingList)
+        {
+            return bindingList.Count;
+        }
+        return 0;
     }
 }
 
@@ -1782,9 +1870,41 @@ public class DataGridViewFilteredHeaderCell : DataGridViewColumnHeaderCell
                 }
             }
 
-            // Обновляем DataSource
-            DataGridView.DataSource = new BindingList<UserData>(filteredList);
+            // Обновляем DataSource только если есть фильтры
+            if (!string.IsNullOrEmpty(filterText) || HasAnyActiveFilters())
+            {
+                DataGridView.DataSource = new BindingList<UserData>(filteredList);
+            }
+            else
+            {
+                // Если нет активных фильтров, восстанавливаем полный список
+                DataGridView.DataSource = new BindingList<UserData>(originalList);
+            }
+
+            // Логируем для отладки
+            System.Diagnostics.Debug.WriteLine($"[RankSystem] Filter applied: {filteredList.Count} of {originalList.Count} users shown");
+
+            // Обновляем заголовок формы
+            if (parentForm != null)
+            {
+                parentForm.UpdateFormTitle();
+            }
         }
+    }
+
+    private bool HasAnyActiveFilters()
+    {
+        if (DataGridView?.Columns == null) return false;
+
+        foreach (DataGridViewColumn column in DataGridView.Columns)
+        {
+            if (column is DataGridViewFilteredTextBoxColumn filteredColumn)
+            {
+                if (!string.IsNullOrEmpty(filteredColumn.GetFilterText()))
+                    return true;
+            }
+        }
+        return false;
     }
 
     public void UpdateFilterPosition()
