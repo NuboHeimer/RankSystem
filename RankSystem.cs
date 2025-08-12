@@ -433,11 +433,6 @@ public class CPHInline
 
         if (service.Equals("twitch"))
             CPH.SendMessage(reply);
-        else if (service.Equals("Kick"))
-        {
-            CPH.SetArgument("message", reply);
-            CPH.ExecuteMethod("Kick", "SendMessage");
-        }
         else if (service.Equals("trovo"))
             CPH.SendTrovoMessage(reply);
         else
