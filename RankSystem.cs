@@ -5,7 +5,7 @@
 ///   Help:         https://t.me/nuboheimersb/5
 ///----------------------------------------------------------------------------
 
-///   Version:      0.10.1
+///   Version:      0.11.0
 
 using System;
 using System.Collections.Generic;
@@ -73,6 +73,10 @@ public class CPHInline
                 coinsToAdd = DEFAULT_COINS_TO_ADD;
             user.Coins += coinsToAdd;
             DatabaseManager.UpsertUser(user);
+
+            // Обновляем дневную статистику
+            string today = DateTime.Now.ToString("yyyy-MM-dd");
+            DatabaseManager.AddToDailyStatsInternal(user.Service, user.ServiceUserId, today, user.UserName, messageCount: 1, coins: coinsToAdd);
             return true;
         }
         catch (Exception ex)
@@ -124,6 +128,10 @@ public class CPHInline
                 user.Coins += coinsToAdd;
                 user.WatchTime += timeToAdd;
                 DatabaseManager.UpsertUser(user);
+
+                // Обновляем дневную статистику
+                string today = DateTime.Now.ToString("yyyy-MM-dd");
+                DatabaseManager.AddToDailyStatsInternal(user.Service, user.ServiceUserId, today, user.UserName, watchTime: timeToAdd, coins: coinsToAdd);
             }
 
             return true;
@@ -254,6 +262,10 @@ public class CPHInline
                 coinsFromArgs = DEFAULT_COINS_TO_ADD;
             user.Coins += coinsFromArgs;
             DatabaseManager.UpsertUser(user);
+
+            // Обновляем дневную статистику
+            string today = DateTime.Now.ToString("yyyy-MM-dd");
+            DatabaseManager.AddToDailyStatsInternal(user.Service, user.ServiceUserId, today, user.UserName, coins: coinsFromArgs);
             return true;
         }
         catch (Exception ex)
@@ -299,6 +311,13 @@ public class CPHInline
                 {
                     CPH.SetArgument("coinsToAdd", -actionCurrency);
                     AddCoins();
+
+                    // Обновляем дневную статистику для потраченных монет
+                    string today = DateTime.Now.ToString("yyyy-MM-dd");
+                    string service = RankSystemInternal.NormalizeService(this);
+                    var user = CreateUserFormArgs(service);
+                    DatabaseManager.AddToDailyStatsInternal(user.Service, user.ServiceUserId, today, user.UserName, spentCoins: actionCurrency);
+
                     return true;
                 }
             }
@@ -504,6 +523,166 @@ public class CPHInline
         form.ShowDialog();
         return true;
     }
+    public bool GetDailyStats()
+    {
+        try
+        {
+            string service = RankSystemInternal.NormalizeService(this);
+            var user = CreateUserFormArgs(service);
+
+            if (!CPH.TryGetArg("date", out string date))
+                date = DateTime.Now.ToString("yyyy-MM-dd");
+
+            var dailyStats = DatabaseManager.GetDailyStatsForUser(user.Service, user.ServiceUserId, date);
+
+            if (dailyStats != null)
+            {
+                CPH.SetArgument("dailyWatchTime", dailyStats.WatchTime);
+                CPH.SetArgument("dailyMessageCount", dailyStats.MessageCount);
+                CPH.SetArgument("dailyCoins", dailyStats.Coins);
+                CPH.SetArgument("dailySpentCoins", dailyStats.SpentCoins);
+                CPH.SetArgument("dailyDate", dailyStats.Date);
+            }
+            else
+            {
+                CPH.SetArgument("dailyWatchTime", 0);
+                CPH.SetArgument("dailyMessageCount", 0);
+                CPH.SetArgument("dailyCoins", 0);
+                CPH.SetArgument("dailySpentCoins", 0);
+                CPH.SetArgument("dailyDate", date);
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            CPH.LogError($"[RankSystem] GetDailyStats Error: {ex}");
+            return false;
+        }
+    }
+
+    public bool GetWeeklyStats()
+    {
+        try
+        {
+            string service = RankSystemInternal.NormalizeService(this);
+            var user = CreateUserFormArgs(service);
+
+            var endDate = DateTime.Now;
+            var startDate = endDate.AddDays(-6); // 7 дней включая сегодня
+
+            var weeklyStats = DatabaseManager.GetDailyStatsForPeriod(user.Service, user.ServiceUserId, startDate, endDate);
+
+            long totalWatchTime = 0;
+            long totalMessageCount = 0;
+            long totalCoins = 0;
+            long totalSpentCoins = 0;
+
+            foreach (var stat in weeklyStats)
+            {
+                totalWatchTime += stat.WatchTime;
+                totalMessageCount += stat.MessageCount;
+                totalCoins += stat.Coins;
+                totalSpentCoins += stat.SpentCoins;
+            }
+
+            CPH.SetArgument("weeklyWatchTime", totalWatchTime);
+            CPH.SetArgument("weeklyMessageCount", totalMessageCount);
+            CPH.SetArgument("weeklyCoins", totalCoins);
+            CPH.SetArgument("weeklySpentCoins", totalSpentCoins);
+            CPH.SetArgument("weeklyStartDate", startDate.ToString("yyyy-MM-dd"));
+            CPH.SetArgument("weeklyEndDate", endDate.ToString("yyyy-MM-dd"));
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            CPH.LogError($"[RankSystem] GetWeeklyStats Error: {ex}");
+            return false;
+        }
+    }
+
+    public bool GetMonthlyStats()
+    {
+        try
+        {
+            string service = RankSystemInternal.NormalizeService(this);
+            var user = CreateUserFormArgs(service);
+
+            var endDate = DateTime.Now;
+            var startDate = new DateTime(endDate.Year, endDate.Month, 1); // Первый день текущего месяца
+
+            var monthlyStats = DatabaseManager.GetDailyStatsForPeriod(user.Service, user.ServiceUserId, startDate, endDate);
+
+            long totalWatchTime = 0;
+            long totalMessageCount = 0;
+            long totalCoins = 0;
+            long totalSpentCoins = 0;
+
+            foreach (var stat in monthlyStats)
+            {
+                totalWatchTime += stat.WatchTime;
+                totalMessageCount += stat.MessageCount;
+                totalCoins += stat.Coins;
+                totalSpentCoins += stat.SpentCoins;
+            }
+
+            CPH.SetArgument("monthlyWatchTime", totalWatchTime);
+            CPH.SetArgument("monthlyMessageCount", totalMessageCount);
+            CPH.SetArgument("monthlyCoins", totalCoins);
+            CPH.SetArgument("monthlySpentCoins", totalSpentCoins);
+            CPH.SetArgument("monthlyStartDate", startDate.ToString("yyyy-MM-dd"));
+            CPH.SetArgument("monthlyEndDate", endDate.ToString("yyyy-MM-dd"));
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            CPH.LogError($"[RankSystem] GetMonthlyStats Error: {ex}");
+            return false;
+        }
+    }
+
+    public bool GetYearlyStats()
+    {
+        try
+        {
+            string service = RankSystemInternal.NormalizeService(this);
+            var user = CreateUserFormArgs(service);
+
+            var endDate = DateTime.Now;
+            var startDate = new DateTime(endDate.Year, 1, 1); // Первый день текущего года
+
+            var yearlyStats = DatabaseManager.GetDailyStatsForPeriod(user.Service, user.ServiceUserId, startDate, endDate);
+
+            long totalWatchTime = 0;
+            long totalMessageCount = 0;
+            long totalCoins = 0;
+            long totalSpentCoins = 0;
+
+            foreach (var stat in yearlyStats)
+            {
+                totalWatchTime += stat.WatchTime;
+                totalMessageCount += stat.MessageCount;
+                totalCoins += stat.Coins;
+                totalSpentCoins += stat.SpentCoins;
+            }
+
+            CPH.SetArgument("yearlyWatchTime", totalWatchTime);
+            CPH.SetArgument("yearlyMessageCount", totalMessageCount);
+            CPH.SetArgument("yearlyCoins", totalCoins);
+            CPH.SetArgument("yearlySpentCoins", totalSpentCoins);
+            CPH.SetArgument("yearlyStartDate", startDate.ToString("yyyy-MM-dd"));
+            CPH.SetArgument("yearlyEndDate", endDate.ToString("yyyy-MM-dd"));
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            CPH.LogError($"[RankSystem] GetYearlyStats Error: {ex}");
+            return false;
+        }
+    }
 }
 
 // Класс для десериализации данных из Live.json
@@ -541,9 +720,24 @@ public class UserNameHistory
 {
     public long Id { get; set; }
     public string UUID { get; set; }
+    public string Service { get; set; }
+    public string ServiceUserId { get; set; }
     public string OldUserName { get; set; }
     public string NewUserName { get; set; }
     public DateTime ChangeDate { get; set; }
+}
+
+public class DailyStats
+{
+    public long Id { get; set; }
+    public string Date { get; set; } // YYYY-MM-DD формат
+    public string ServiceUserId { get; set; }
+    public string Service { get; set; }
+    public string Username { get; set; }
+    public long WatchTime { get; set; }
+    public long MessageCount { get; set; }
+    public long Coins { get; set; }
+    public long SpentCoins { get; set; }
 }
 
 public static class DatabaseManager
@@ -601,6 +795,29 @@ public static class DatabaseManager
                         ChangeDate TEXT NOT NULL,
                         FOREIGN KEY (UUID) REFERENCES Users(UUID)
                     );";
+                    cmd.ExecuteNonQuery();
+
+                    cmd.CommandText = @"
+                    CREATE TABLE IF NOT EXISTS DailyStats (
+                        Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        Date TEXT NOT NULL,
+                        ServiceUserId TEXT NOT NULL,
+                        Service TEXT NOT NULL,
+                        Username TEXT NOT NULL,
+                        WatchTime INTEGER DEFAULT 0,
+                        MessageCount INTEGER DEFAULT 0,
+                        Coins INTEGER DEFAULT 0,
+                        SpentCoins INTEGER DEFAULT 0,
+                        UNIQUE(Date, ServiceUserId, Service)
+                    );";
+                    cmd.ExecuteNonQuery();
+
+                    // Создаем индексы для таблицы DailyStats
+                    cmd.CommandText = "CREATE INDEX IF NOT EXISTS idx_dailystats_date ON DailyStats(Date);";
+                    cmd.ExecuteNonQuery();
+                    cmd.CommandText = "CREATE INDEX IF NOT EXISTS idx_dailystats_user ON DailyStats(ServiceUserId, Service);";
+                    cmd.ExecuteNonQuery();
+                    cmd.CommandText = "CREATE INDEX IF NOT EXISTS idx_dailystats_date_user ON DailyStats(Date, ServiceUserId, Service);";
                     cmd.ExecuteNonQuery();
 
                     // Check and add missing columns in Users table
@@ -667,6 +884,108 @@ public static class DatabaseManager
                             cmd.CommandText = $"ALTER TABLE UserNameHistory ADD COLUMN {column.Key} {column.Value};";
                             cmd.ExecuteNonQuery();
                         }
+                    }
+
+                    // Check and add missing columns in DailyStats table
+                    expectedColumns = new Dictionary<string, string>
+                    {
+                        { "Id", "INTEGER PRIMARY KEY AUTOINCREMENT" },
+                        { "Date", "TEXT NOT NULL" },
+                        { "ServiceUserId", "TEXT NOT NULL" },
+                        { "Service", "TEXT NOT NULL" },
+                        { "Username", "TEXT" },
+                        { "WatchTime", "INTEGER DEFAULT 0" },
+                        { "MessageCount", "INTEGER DEFAULT 0" },
+                        { "Coins", "INTEGER DEFAULT 0" },
+                        { "SpentCoins", "INTEGER DEFAULT 0" }
+                    };
+
+                    // Get existing columns
+                    cmd.CommandText = "PRAGMA table_info(DailyStats);";
+                    existingColumns.Clear();
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            existingColumns.Add(reader["name"].ToString());
+                        }
+                    }
+
+                    // Add missing columns
+                    foreach (var column in expectedColumns)
+                    {
+                        if (!existingColumns.Contains(column.Key))
+                        {
+                            cmd.CommandText = $"ALTER TABLE DailyStats ADD COLUMN {column.Key} {column.Value};";
+                            cmd.ExecuteNonQuery();
+                        }
+                    }
+
+                    // Если колонка Username была добавлена, заполняем существующие записи
+                    if (!existingColumns.Contains("Username"))
+                    {
+                        // Получаем все уникальные пользователи из таблицы Users
+                        cmd.CommandText = "SELECT DISTINCT Service, ServiceUserId, UserName FROM Users;";
+                        var userData = new List<(string Service, string ServiceUserId, string UserName)>();
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                userData.Add((
+                                    reader["Service"].ToString(),
+                                    reader["ServiceUserId"].ToString(),
+                                    reader["UserName"].ToString()
+                                ));
+                            }
+                        }
+
+                        // Обновляем существующие записи в DailyStats
+                        foreach (var user in userData)
+                        {
+                            cmd.CommandText = "UPDATE DailyStats SET Username = @Username WHERE Service = @Service AND ServiceUserId = @ServiceUserId;";
+                            cmd.Parameters.Clear();
+                            cmd.Parameters.AddWithValue("@Username", user.UserName);
+                            cmd.Parameters.AddWithValue("@Service", user.Service);
+                            cmd.Parameters.AddWithValue("@ServiceUserId", user.ServiceUserId);
+                            cmd.ExecuteNonQuery();
+                        }
+
+                        // После заполнения данных добавляем ограничение NOT NULL
+                        // Для этого нужно пересоздать таблицу
+                        cmd.CommandText = @"
+                        CREATE TABLE DailyStats_new (
+                            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            Date TEXT NOT NULL,
+                            ServiceUserId TEXT NOT NULL,
+                            Service TEXT NOT NULL,
+                            Username TEXT NOT NULL,
+                            WatchTime INTEGER DEFAULT 0,
+                            MessageCount INTEGER DEFAULT 0,
+                            Coins INTEGER DEFAULT 0,
+                            SpentCoins INTEGER DEFAULT 0,
+                            UNIQUE(Date, ServiceUserId, Service)
+                        );";
+                        cmd.ExecuteNonQuery();
+
+                        // Копируем данные в новую таблицу
+                        cmd.CommandText = @"
+                        INSERT INTO DailyStats_new (Id, Date, ServiceUserId, Service, Username, WatchTime, MessageCount, Coins, SpentCoins)
+                        SELECT Id, Date, ServiceUserId, Service, Username, WatchTime, MessageCount, Coins, SpentCoins FROM DailyStats;";
+                        cmd.ExecuteNonQuery();
+
+                        // Удаляем старую таблицу и переименовываем новую
+                        cmd.CommandText = "DROP TABLE DailyStats;";
+                        cmd.ExecuteNonQuery();
+                        cmd.CommandText = "ALTER TABLE DailyStats_new RENAME TO DailyStats;";
+                        cmd.ExecuteNonQuery();
+
+                        // Пересоздаем индексы
+                        cmd.CommandText = "CREATE INDEX IF NOT EXISTS idx_dailystats_date ON DailyStats(Date);";
+                        cmd.ExecuteNonQuery();
+                        cmd.CommandText = "CREATE INDEX IF NOT EXISTS idx_dailystats_user ON DailyStats(ServiceUserId, Service);";
+                        cmd.ExecuteNonQuery();
+                        cmd.CommandText = "CREATE INDEX IF NOT EXISTS idx_dailystats_date_user ON DailyStats(Date, ServiceUserId, Service);";
+                        cmd.ExecuteNonQuery();
                     }
                 }
             }
@@ -942,9 +1261,11 @@ public static class DatabaseManager
                 using (var cmd = new SQLiteCommand(connection))
                 {
                     cmd.CommandText = @"
-                    SELECT * FROM UserNameHistory 
-                    WHERE UUID = @UUID 
-                    ORDER BY ChangeDate DESC";
+                    SELECT h.*, u.Service, u.ServiceUserId 
+                    FROM UserNameHistory h
+                    JOIN Users u ON h.UUID = u.UUID
+                    WHERE h.UUID = @UUID 
+                    ORDER BY h.ChangeDate DESC";
 
                     cmd.Parameters.AddWithValue("@UUID", uuid);
 
@@ -959,7 +1280,9 @@ public static class DatabaseManager
                                 UUID = reader["UUID"].ToString(),
                                 OldUserName = reader["OldUserName"].ToString(),
                                 NewUserName = reader["NewUserName"].ToString(),
-                                ChangeDate = DateTime.Parse(reader["ChangeDate"].ToString())
+                                ChangeDate = DateTime.Parse(reader["ChangeDate"].ToString()),
+                                Service = reader["Service"].ToString(),
+                                ServiceUserId = reader["ServiceUserId"].ToString()
                             });
                         }
                         return history;
@@ -993,6 +1316,326 @@ public static class DatabaseManager
         finally
         {
             _lock.ExitWriteLock();
+        }
+    }
+
+    // Методы для работы с ежедневной статистикой
+
+    public static List<DailyStats> GetDailyStats(string filter = null, SQLiteParameter[] parameters = null)
+    {
+        _lock.EnterReadLock();
+        try
+        {
+            using (var connection = CreateConnection())
+            {
+                connection.Open();
+                using (var cmd = new SQLiteCommand(connection))
+                {
+                    cmd.CommandText = "SELECT * FROM DailyStats";
+                    if (!string.IsNullOrEmpty(filter))
+                        cmd.CommandText += " WHERE " + filter;
+                    if (parameters != null)
+                        cmd.Parameters.AddRange(parameters);
+
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        var dailyStats = new List<DailyStats>();
+                        while (reader.Read())
+                        {
+                            dailyStats.Add(new DailyStats
+                            {
+                                Id = Convert.ToInt64(reader["Id"]),
+                                Date = reader["Date"].ToString(),
+                                ServiceUserId = reader["ServiceUserId"].ToString(),
+                                Service = reader["Service"].ToString(),
+                                WatchTime = Convert.ToInt64(reader["WatchTime"]),
+                                MessageCount = Convert.ToInt64(reader["MessageCount"]),
+                                Coins = Convert.ToInt64(reader["Coins"]),
+                                SpentCoins = Convert.ToInt64(reader["SpentCoins"])
+                            });
+                        }
+                        return dailyStats;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            _lock.ExitReadLock();
+        }
+    }
+
+    public static DailyStats GetDailyStatsForUser(string service, string serviceUserId, string date)
+    {
+        var result = GetDailyStats(
+            filter: "Service = @Service AND ServiceUserId = @ServiceUserId AND Date = @Date",
+            parameters: new[]
+            {
+                new SQLiteParameter("@Service", service),
+                new SQLiteParameter("@ServiceUserId", serviceUserId),
+                new SQLiteParameter("@Date", date)
+            }
+        );
+        return result.FirstOrDefault();
+    }
+
+    public static List<DailyStats> GetDailyStatsForPeriod(string service, string serviceUserId, DateTime startDate, DateTime endDate)
+    {
+        return GetDailyStats(
+            filter: "Service = @Service AND ServiceUserId = @ServiceUserId AND Date BETWEEN @StartDate AND @EndDate ORDER BY Date",
+            parameters: new[]
+            {
+                new SQLiteParameter("@Service", service),
+                new SQLiteParameter("@ServiceUserId", serviceUserId),
+                new SQLiteParameter("@StartDate", startDate.ToString("yyyy-MM-dd")),
+                new SQLiteParameter("@EndDate", endDate.ToString("yyyy-MM-dd"))
+            }
+        );
+    }
+
+    public static string GetLastDailyStatsDate(string service, string serviceUserId)
+    {
+        _lock.EnterReadLock();
+        try
+        {
+            using (var connection = CreateConnection())
+            {
+                connection.Open();
+                using (var cmd = new SQLiteCommand(connection))
+                {
+                    cmd.CommandText = @"
+                    SELECT MAX(Date) as LastDate FROM DailyStats 
+                    WHERE Service = @Service AND ServiceUserId = @ServiceUserId";
+
+                    cmd.Parameters.AddWithValue("@Service", service);
+                    cmd.Parameters.AddWithValue("@ServiceUserId", serviceUserId);
+
+                    var result = cmd.ExecuteScalar();
+                    return result?.ToString();
+                }
+            }
+        }
+        finally
+        {
+            _lock.ExitReadLock();
+        }
+    }
+
+    // Методы для точечного обновления дневной статистики
+
+    public static void AddToDailyStats(string service, string serviceUserId, string date, string username, long watchTime = 0, long messageCount = 0, long coins = 0, long spentCoins = 0)
+    {
+        _lock.EnterWriteLock();
+        try
+        {
+            using (var connection = CreateConnection())
+            {
+                connection.Open();
+                using (var cmd = new SQLiteCommand(connection))
+                {
+                    cmd.CommandText = @"
+                    UPDATE DailyStats 
+                    SET WatchTime = WatchTime + @WatchTime,
+                        MessageCount = MessageCount + @MessageCount,
+                        Coins = Coins + @Coins,
+                        SpentCoins = SpentCoins + @SpentCoins
+                    WHERE Date = @Date AND ServiceUserId = @ServiceUserId AND Service = @Service";
+
+                    cmd.Parameters.AddWithValue("@Date", date);
+                    cmd.Parameters.AddWithValue("@ServiceUserId", serviceUserId);
+                    cmd.Parameters.AddWithValue("@Service", service);
+                    cmd.Parameters.AddWithValue("@WatchTime", watchTime);
+                    cmd.Parameters.AddWithValue("@MessageCount", messageCount);
+                    cmd.Parameters.AddWithValue("@Coins", coins);
+                    cmd.Parameters.AddWithValue("@SpentCoins", spentCoins);
+
+                    int rowsAffected = cmd.ExecuteNonQuery();
+
+                    // Если запись не найдена, создаем новую
+                    if (rowsAffected == 0)
+                    {
+                        CreateDailyStatsInternal(service, serviceUserId, date, username, watchTime, messageCount, coins, spentCoins);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            _lock.ExitWriteLock();
+        }
+    }
+
+    public static void UpdateDailyStatsColumn(string service, string serviceUserId, string date, string column, long value)
+    {
+        _lock.EnterWriteLock();
+        try
+        {
+            UpdateDailyStatsColumnInternal(service, serviceUserId, date, column, value);
+        }
+        finally
+        {
+            _lock.ExitWriteLock();
+        }
+    }
+
+    // Внутренний метод без блокировки для использования внутри уже заблокированных операций
+    public static void UpdateDailyStatsColumnInternal(string service, string serviceUserId, string date, string column, long value)
+    {
+        using (var connection = CreateConnection())
+        {
+            connection.Open();
+            using (var cmd = new SQLiteCommand(connection))
+            {
+                cmd.CommandText = $@"
+                UPDATE DailyStats 
+                SET {column} = @Value
+                WHERE Date = @Date AND ServiceUserId = @ServiceUserId AND Service = @Service";
+
+                cmd.Parameters.AddWithValue("@Date", date);
+                cmd.Parameters.AddWithValue("@ServiceUserId", serviceUserId);
+                cmd.Parameters.AddWithValue("@Service", service);
+                cmd.Parameters.AddWithValue("@Value", value);
+
+                int rowsAffected = cmd.ExecuteNonQuery();
+
+                // Если запись не найдена, создаем новую с нулевыми значениями
+                if (rowsAffected == 0)
+                {
+                    var dailyStats = new DailyStats
+                    {
+                        Date = date,
+                        ServiceUserId = serviceUserId,
+                        Service = service,
+                        WatchTime = 0,
+                        MessageCount = 0,
+                        Coins = 0,
+                        SpentCoins = 0
+                    };
+
+                    // Устанавливаем значение для указанной колонки
+                    switch (column.ToLower())
+                    {
+                        case "watchtime":
+                            dailyStats.WatchTime = value;
+                            break;
+                        case "messagecount":
+                            dailyStats.MessageCount = value;
+                            break;
+                        case "coins":
+                            dailyStats.Coins = value;
+                            break;
+                        case "spentcoins":
+                            dailyStats.SpentCoins = value;
+                            break;
+                    }
+
+                    UpsertDailyStatsInternal(dailyStats);
+                }
+            }
+        }
+    }
+
+    // Внутренний метод без блокировки для использования внутри уже заблокированных операций
+    public static void AddToDailyStatsInternal(string service, string serviceUserId, string date, string username, long watchTime = 0, long messageCount = 0, long coins = 0, long spentCoins = 0)
+    {
+        using (var connection = CreateConnection())
+        {
+            connection.Open();
+            using (var cmd = new SQLiteCommand(connection))
+            {
+                cmd.CommandText = @"
+                UPDATE DailyStats 
+                SET WatchTime = WatchTime + @WatchTime,
+                    MessageCount = MessageCount + @MessageCount,
+                    Coins = Coins + @Coins,
+                    SpentCoins = SpentCoins + @SpentCoins
+                WHERE Date = @Date AND ServiceUserId = @ServiceUserId AND Service = @Service";
+
+                cmd.Parameters.AddWithValue("@Date", date);
+                cmd.Parameters.AddWithValue("@ServiceUserId", serviceUserId);
+                cmd.Parameters.AddWithValue("@Service", service);
+                cmd.Parameters.AddWithValue("@WatchTime", watchTime);
+                cmd.Parameters.AddWithValue("@MessageCount", messageCount);
+                cmd.Parameters.AddWithValue("@Coins", coins);
+                cmd.Parameters.AddWithValue("@SpentCoins", spentCoins);
+
+                int rowsAffected = cmd.ExecuteNonQuery();
+
+                // Если запись не найдена, создаем новую
+                if (rowsAffected == 0)
+                {
+                    CreateDailyStatsInternal(service, serviceUserId, date, username, watchTime, messageCount, coins, spentCoins);
+                }
+            }
+        }
+    }
+
+    public static void CreateDailyStats(string service, string serviceUserId, string date, string username, long watchTime = 0, long messageCount = 0, long coins = 0, long spentCoins = 0)
+    {
+        _lock.EnterWriteLock();
+        try
+        {
+            CreateDailyStatsInternal(service, serviceUserId, date, username, watchTime, messageCount, coins, spentCoins);
+        }
+        finally
+        {
+            _lock.ExitWriteLock();
+        }
+    }
+
+    // Внутренний метод без блокировки для использования внутри уже заблокированных операций
+    public static void CreateDailyStatsInternal(string service, string serviceUserId, string date, string username, long watchTime = 0, long messageCount = 0, long coins = 0, long spentCoins = 0)
+    {
+        var dailyStats = new DailyStats
+        {
+            Date = date,
+            ServiceUserId = serviceUserId,
+            Service = service,
+            Username = username,
+            WatchTime = watchTime,
+            MessageCount = messageCount,
+            Coins = coins,
+            SpentCoins = spentCoins
+        };
+        UpsertDailyStatsInternal(dailyStats);
+    }
+
+    public static void UpsertDailyStats(DailyStats dailyStats)
+    {
+        _lock.EnterWriteLock();
+        try
+        {
+            UpsertDailyStatsInternal(dailyStats);
+        }
+        finally
+        {
+            _lock.ExitWriteLock();
+        }
+    }
+
+    // Внутренний метод без блокировки для использования внутри уже заблокированных операций
+    public static void UpsertDailyStatsInternal(DailyStats dailyStats)
+    {
+        using (var connection = CreateConnection())
+        {
+            connection.Open();
+            using (var cmd = new SQLiteCommand(connection))
+            {
+                cmd.CommandText = @"
+                INSERT OR REPLACE INTO DailyStats (Date, ServiceUserId, Service, Username, WatchTime, MessageCount, Coins, SpentCoins)
+                VALUES (@Date, @ServiceUserId, @Service, @Username, @WatchTime, @MessageCount, @Coins, @SpentCoins)";
+
+                cmd.Parameters.AddWithValue("@Date", dailyStats.Date);
+                cmd.Parameters.AddWithValue("@ServiceUserId", dailyStats.ServiceUserId);
+                cmd.Parameters.AddWithValue("@Service", dailyStats.Service);
+                cmd.Parameters.AddWithValue("@Username", dailyStats.Username);
+                cmd.Parameters.AddWithValue("@WatchTime", dailyStats.WatchTime);
+                cmd.Parameters.AddWithValue("@MessageCount", dailyStats.MessageCount);
+                cmd.Parameters.AddWithValue("@Coins", dailyStats.Coins);
+                cmd.Parameters.AddWithValue("@SpentCoins", dailyStats.SpentCoins);
+
+                cmd.ExecuteNonQuery();
+            }
         }
     }
 }
