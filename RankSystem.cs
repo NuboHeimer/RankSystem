@@ -706,6 +706,9 @@ public static class DatabaseManager
 
     public static void UpsertUser(UserData user)
     {
+        // Логируем входные данные для отладки
+        System.Diagnostics.Debug.WriteLine($"[RankSystem] UpsertUser called for user: {user.UserName} ({user.Service}), GameWhenFollow: '{user.GameWhenFollow}'");
+
         // Определим, является ли это добавлением сообщения
         bool isMessageIncrement = false;
         long coinsToAdd = 0;
@@ -764,22 +767,43 @@ public static class DatabaseManager
                                     updateQuery += ", MessageCount = MessageCount + 1";
                                 }
 
+                                // Обновляем FollowDate только если он больше минимального значения
                                 if (user.FollowDate > DateTime.MinValue)
                                 {
-                                    updateQuery += ", FollowDate = @FollowDate, GameWhenFollow = @GameWhenFollow";
+                                    updateQuery += ", FollowDate = @FollowDate";
+                                }
+
+                                // GameWhenFollow обновляем всегда, если он не null
+                                if (!string.IsNullOrEmpty(user.GameWhenFollow))
+                                {
+                                    updateQuery += ", GameWhenFollow = @GameWhenFollow";
+                                }
+                                else
+                                {
+                                    // Если GameWhenFollow пустой, устанавливаем его в NULL
+                                    updateQuery += ", GameWhenFollow = NULL";
                                 }
 
                                 updateQuery += " WHERE Service = @Service AND ServiceUserId = @ServiceUserId";
                                 cmd.CommandText = updateQuery;
+
+                                // Логируем SQL запрос для отладки
+                                System.Diagnostics.Debug.WriteLine($"[RankSystem] Update query: {updateQuery}");
                                 cmd.Parameters.AddWithValue("@Service", user.Service);
                                 cmd.Parameters.AddWithValue("@ServiceUserId", user.ServiceUserId);
                                 cmd.Parameters.AddWithValue("@UserName", user.UserName);
                                 cmd.Parameters.AddWithValue("@WatchTime", user.WatchTime);
                                 cmd.Parameters.AddWithValue("@CoinsToAdd", coinsToAdd);
+                                // Добавляем параметр FollowDate только если он больше минимального значения
                                 if (user.FollowDate > DateTime.MinValue)
                                 {
                                     cmd.Parameters.AddWithValue("@FollowDate", user.FollowDate.ToString("o"));
-                                    cmd.Parameters.AddWithValue("@GameWhenFollow", user.GameWhenFollow ?? (object)DBNull.Value);
+                                }
+
+                                // GameWhenFollow обновляем всегда, если он не null
+                                if (!string.IsNullOrEmpty(user.GameWhenFollow))
+                                {
+                                    cmd.Parameters.AddWithValue("@GameWhenFollow", user.GameWhenFollow);
                                 }
 
                                 cmd.ExecuteNonQuery();
@@ -1409,12 +1433,16 @@ public class RankSystemForm : Form
         txtFollowDate.Text = user.FollowDate.ToString("o");
         txtMessageCount.Text = user.MessageCount.ToString();
         txtCoins.Text = user.Coins.ToString();
-        txtGameWhenFollow.Text = user.GameWhenFollow;
+        // Правильно обрабатываем null значения для GameWhenFollow
+        txtGameWhenFollow.Text = user.GameWhenFollow ?? "";
     }
 
     private UserData GetUserFromFields()
     {
-        return new UserData
+        // Обрабатываем GameWhenFollow специально - пустая строка должна стать null
+        string gameWhenFollow = string.IsNullOrWhiteSpace(txtGameWhenFollow.Text) ? null : txtGameWhenFollow.Text.Trim();
+
+        var user = new UserData
         {
             UUID = txtUUID.Text,
             Service = txtService.Text,
@@ -1424,8 +1452,13 @@ public class RankSystemForm : Form
             FollowDate = DateTime.TryParse(txtFollowDate.Text, out var fd) ? fd : DateTime.MinValue,
             MessageCount = long.TryParse(txtMessageCount.Text, out var mc) ? mc : 0,
             Coins = long.TryParse(txtCoins.Text, out var c) ? c : 0,
-            GameWhenFollow = txtGameWhenFollow.Text
+            GameWhenFollow = gameWhenFollow
         };
+
+        // Логируем созданный объект для отладки
+        System.Diagnostics.Debug.WriteLine($"[RankSystem] GetUserFromFields created user: {user.UserName}, GameWhenFollow: '{user.GameWhenFollow}'");
+
+        return user;
     }
 
     private void BtnAdd_Click(object sender, EventArgs e)
@@ -1439,6 +1472,10 @@ public class RankSystemForm : Form
     private void BtnSave_Click(object sender, EventArgs e)
     {
         var user = GetUserFromFields();
+
+        // Логируем данные перед сохранением для отладки
+        System.Diagnostics.Debug.WriteLine($"[RankSystem] Saving user: {user.UserName} ({user.Service}), GameWhenFollow: '{user.GameWhenFollow}'");
+
         DatabaseManager.UpsertUser(user);
 
         // Обновляем данные и восстанавливаем полный список
@@ -1498,7 +1535,7 @@ public class RankSystemForm : Form
         txtFollowDate.Text = "0001-01-01T00:00:00.0000000";
         txtMessageCount.Text = "0";
         txtCoins.Text = "0";
-        txtGameWhenFollow.Text = "";
+        txtGameWhenFollow.Text = ""; // Пустая строка для GameWhenFollow
     }
 
     private void ClearAllFilters()
