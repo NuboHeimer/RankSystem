@@ -530,8 +530,7 @@ public class CPHInline
             string service = RankSystemInternal.NormalizeService(this);
             var user = CreateUserFormArgs(service);
 
-            if (!CPH.TryGetArg("date", out string date))
-                date = DateTime.Now.ToString("yyyy-MM-dd");
+            string date = DateTime.Now.ToString("yyyy-MM-dd");
 
             var dailyStats = DatabaseManager.GetDailyStatsForUser(user.Service, user.ServiceUserId, date);
 
@@ -602,7 +601,57 @@ public class CPHInline
         }
     }
 
-    public bool GetMonthlyStats()
+    public bool GetCalendarWeeklyStats()
+    {
+        try
+        {
+            string service = RankSystemInternal.NormalizeService(this);
+            var user = CreateUserFormArgs(service);
+
+            var currentDate = DateTime.Now;
+
+            // Находим начало календарной недели (понедельник)
+            var startDate = currentDate.AddDays(-(int)currentDate.DayOfWeek + (int)DayOfWeek.Monday);
+            if (currentDate.DayOfWeek == DayOfWeek.Sunday)
+            {
+                startDate = startDate.AddDays(-7); // Если сегодня воскресенье, берем предыдущую неделю
+            }
+
+            // Находим конец календарной недели (воскресенье)
+            var endDate = startDate.AddDays(6);
+
+            var calendarWeeklyStats = DatabaseManager.GetDailyStatsForPeriod(user.Service, user.ServiceUserId, startDate, endDate);
+
+            long totalWatchTime = 0;
+            long totalMessageCount = 0;
+            long totalCoins = 0;
+            long totalSpentCoins = 0;
+
+            foreach (var stat in calendarWeeklyStats)
+            {
+                totalWatchTime += stat.WatchTime;
+                totalMessageCount += stat.MessageCount;
+                totalCoins += stat.Coins;
+                totalSpentCoins += stat.SpentCoins;
+            }
+
+            CPH.SetArgument("calendarWeeklyWatchTime", totalWatchTime);
+            CPH.SetArgument("calendarWeeklyMessageCount", totalMessageCount);
+            CPH.SetArgument("calendarWeeklyCoins", totalCoins);
+            CPH.SetArgument("calendarWeeklySpentCoins", totalSpentCoins);
+            CPH.SetArgument("calendarWeeklyStartDate", startDate.ToString("yyyy-MM-dd"));
+            CPH.SetArgument("calendarWeeklyEndDate", endDate.ToString("yyyy-MM-dd"));
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            CPH.LogError($"[RankSystem] GetCalendarWeeklyStats Error: {ex}");
+            return false;
+        }
+    }
+
+    public bool GetCalendarMonthlyStats()
     {
         try
         {
@@ -643,7 +692,48 @@ public class CPHInline
         }
     }
 
-    public bool GetYearlyStats()
+    public bool GetLast30DaysStats()
+    {
+        try
+        {
+            string service = RankSystemInternal.NormalizeService(this);
+            var user = CreateUserFormArgs(service);
+
+            var endDate = DateTime.Now;
+            var startDate = endDate.AddDays(-29); // 30 дней включая сегодня
+
+            var last30DaysStats = DatabaseManager.GetDailyStatsForPeriod(user.Service, user.ServiceUserId, startDate, endDate);
+
+            long totalWatchTime = 0;
+            long totalMessageCount = 0;
+            long totalCoins = 0;
+            long totalSpentCoins = 0;
+
+            foreach (var stat in last30DaysStats)
+            {
+                totalWatchTime += stat.WatchTime;
+                totalMessageCount += stat.MessageCount;
+                totalCoins += stat.Coins;
+                totalSpentCoins += stat.SpentCoins;
+            }
+
+            CPH.SetArgument("last30DaysWatchTime", totalWatchTime);
+            CPH.SetArgument("last30DaysMessageCount", totalMessageCount);
+            CPH.SetArgument("last30DaysCoins", totalCoins);
+            CPH.SetArgument("last30DaysSpentCoins", totalSpentCoins);
+            CPH.SetArgument("last30DaysStartDate", startDate.ToString("yyyy-MM-dd"));
+            CPH.SetArgument("last30DaysEndDate", endDate.ToString("yyyy-MM-dd"));
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            CPH.LogError($"[RankSystem] GetLast30DaysStats Error: {ex}");
+            return false;
+        }
+    }
+
+    public bool GetCalendarYearlyStats()
     {
         try
         {
@@ -680,6 +770,47 @@ public class CPHInline
         catch (Exception ex)
         {
             CPH.LogError($"[RankSystem] GetYearlyStats Error: {ex}");
+            return false;
+        }
+    }
+
+    public bool GetLast365DaysStats()
+    {
+        try
+        {
+            string service = RankSystemInternal.NormalizeService(this);
+            var user = CreateUserFormArgs(service);
+
+            var endDate = DateTime.Now;
+            var startDate = endDate.AddDays(-364); // 365 дней включая сегодня
+
+            var last365DaysStats = DatabaseManager.GetDailyStatsForPeriod(user.Service, user.ServiceUserId, startDate, endDate);
+
+            long totalWatchTime = 0;
+            long totalMessageCount = 0;
+            long totalCoins = 0;
+            long totalSpentCoins = 0;
+
+            foreach (var stat in last365DaysStats)
+            {
+                totalWatchTime += stat.WatchTime;
+                totalMessageCount += stat.MessageCount;
+                totalCoins += stat.Coins;
+                totalSpentCoins += stat.SpentCoins;
+            }
+
+            CPH.SetArgument("last365DaysWatchTime", totalWatchTime);
+            CPH.SetArgument("last365DaysMessageCount", totalMessageCount);
+            CPH.SetArgument("last365DaysCoins", totalCoins);
+            CPH.SetArgument("last365DaysSpentCoins", totalSpentCoins);
+            CPH.SetArgument("last365DaysStartDate", startDate.ToString("yyyy-MM-dd"));
+            CPH.SetArgument("last365DaysEndDate", endDate.ToString("yyyy-MM-dd"));
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            CPH.LogError($"[RankSystem] GetLast365DaysStats Error: {ex}");
             return false;
         }
     }
