@@ -72,15 +72,13 @@ RankSystem - это комплексная система для отслежи�
 
 ### 1. Установка
 
-Следуйте подробному руководству: **[INSTALLATION.md](INSTALLATION.md)**
+Следуйте подробному руководству: **[INSTALLATION.md](docs/INSTALLATION.md)**
 
 ### 2. Первые шаги
 
 Изучите примеры использования: **[EXAMPLES.md](EXAMPLES.md)**
 
 ## 🆘 Поддержка
-
-### Контакты
 
 - **Автор**: NuboHeimer
 - **Личка Telegram**: [@nuboheimer](https://t.me/nuboheimer)
