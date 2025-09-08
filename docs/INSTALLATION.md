@@ -180,24 +180,3 @@
 
 #### \[RankSystem] DataBaseForm
 Открывает форму просмотра и редактирования базы данных зрителей.
-
-## 📚 Дополнительные ресурсы
-
-### Документация
-
-- **[README.md](/README.md)** - общая информация о проекте
-- **[CHANGELOG.MD](/CHANGELOG.md)** - история изменений
-
-### 🆘 Поддержка
-
-- **Автор**: NuboHeimer
-- **Личка Telegram**: [@nuboheimer](https://t.me/nuboheimer)
-- **Группа Telegram**: [@nuboheimersb](https://t.me/nuboheimersb/5)
-- **Email**: nuboheimer@yandex.ru
-- **VK**: [vk.com/nuboheimer](https://vk.com/nuboheimer)
-
-### Полезные ссылки
-
-- [Streamer.bot](https://streamer.bot/)
-- [Миничат](https://t.me/streamix_group/3)
-- [Интеграция](https://t.me/StreamfonyBot?start=_tgr_JpK_P4xlZmI6) находится по ссылке в разделе "Плагины". Ссылка реферальная.
