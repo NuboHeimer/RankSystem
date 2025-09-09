@@ -814,6 +814,96 @@ public class CPHInline
             return false;
         }
     }
+
+    public bool MigrateFromRutony()
+    {
+        try
+        {
+            string service = RankSystemInternal.NormalizeService(this);
+            string ranksDbPath = "ranks.db";
+
+            if (!File.Exists(ranksDbPath))
+            {
+                CPH.LogError($"[RankSystem] Файл базы данных {ranksDbPath} не найден!");
+                return false;
+            }
+
+            // Получаем данные текущего пользователя из команды
+            var user = CreateUserFormArgs(service);
+            if (string.IsNullOrEmpty(user.UserName))
+            {
+                CPH.LogError($"[RankSystem] Не удалось получить имя пользователя из команды");
+                return false;
+            }
+
+            CPH.LogInfo($"[RankSystem] Ищем данные для пользователя {user.UserName} в {ranksDbPath}...");
+
+            // Ищем пользователя в базе ranks.db по нику
+            using (var sourceConnection = new SQLiteConnection($"Data Source={ranksDbPath};Version=3;"))
+            {
+                sourceConnection.Open();
+
+                using (var cmd = new SQLiteCommand("SELECT CreditsQty, TimeQty FROM ChatterRank WHERE Nickname = @Nickname", sourceConnection))
+                {
+                    cmd.Parameters.AddWithValue("@Nickname", user.UserName.ToLower());
+
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            var creditsQty = Convert.ToInt64(reader["CreditsQty"] ?? 0);
+                            var timeQty = Convert.ToInt64(reader["TimeQty"] ?? 0);
+
+                            // Получаем существующего пользователя из нашей базы
+                            var existingUser = DatabaseManager.GetUserData(
+                                filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+                                parameters: new[] {
+                                    new SQLiteParameter("@Service", user.Service),
+                                    new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+                                }).FirstOrDefault();
+
+                            if (existingUser != null)
+                            {
+                                // Обновляем существующего пользователя
+                                existingUser.Coins += creditsQty;
+                                existingUser.WatchTime += timeQty;
+                                DatabaseManager.UpsertUser(existingUser);
+                                CPH.LogInfo($"[RankSystem] Обновлен пользователь {user.UserName}: +{creditsQty} монет, +{timeQty} времени просмотра");
+                            }
+                            else
+                            {
+                                // Создаем нового пользователя
+                                user.Coins = creditsQty;
+                                user.WatchTime = timeQty;
+                                user.MessageCount = 0;
+                                user.FollowDate = DateTime.MinValue;
+                                user.GameWhenFollow = "";
+                                DatabaseManager.UpsertUser(user);
+                                CPH.LogInfo($"[RankSystem] Создан пользователь {user.UserName}: {creditsQty} монет, {timeQty} времени просмотра");
+                            }
+
+                            // Устанавливаем аргументы для использования в других действиях
+                            CPH.SetArgument("migratedCredits", creditsQty);
+                            CPH.SetArgument("migratedTime", timeQty);
+                            CPH.SetArgument("migratedUserName", user.UserName);
+
+                            return true;
+                        }
+                        else
+                        {
+                            CPH.LogWarn($"[RankSystem] Пользователь {user.UserName} не найден в базе {ranksDbPath}");
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            CPH.LogError($"[RankSystem] MigrateFromRutony Error: {ex}");
+            return false;
+        }
+    }
 }
 
 // Класс для десериализации данных из Live.json
