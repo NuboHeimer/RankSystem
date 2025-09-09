@@ -52,7 +52,7 @@ public static class RankSystemConfig
 // МОДЕЛИ ДАННЫХ
 // ============================================================================
 
-// Класс для десериализации данных из Live.json
+// Класс для десериализации данных из Live.json from MiniChat
 public class LiveData
 {
     public string Type { get; set; }
@@ -115,13 +115,11 @@ public class DailyStats
 // ОСНОВНОЙ КЛАСС CPHInline
 // ============================================================================
 
-// Основной класс для интеграции с Streamer.bot
-// Содержит публичные методы для вызова из внешней среды
+// Содержит публичные методы для вызова из Streamer.bot
 public class CPHInline
 {
     // Инициализация системы рангов
     // Создает базу данных и необходимые таблицы
-    // Возвращает: Всегда true
     public void Init()
     {
         DatabaseManager.InitializeDatabase();
@@ -144,14 +142,14 @@ public class CPHInline
         try
         {
             string service = RankSystemInternal.NormalizeService(this);
-            var user = CreateUserFormArgs(service);
+            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
             if (string.IsNullOrEmpty(user.Service) || string.IsNullOrEmpty(user.ServiceUserId))
             {
                 CPH.LogError($"[RankSystem][AddMessageCount] Critical user data missing. Service: {user.Service}, ServiceUserId: {user.ServiceUserId}");
                 return false;
             }
 
-            var existingUser = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
+            var existingUser = RankSystemHelpers.GetExistingUser(user.Service, user.ServiceUserId);
             if (existingUser is not null)
             {
                 // Сохраняем актуальное имя пользователя из аргументов
@@ -213,8 +211,8 @@ public class CPHInline
             {
                 string userName = viewer["userName"].ToString().ToLower();
                 string userId = viewer["id"].ToString();
-                var user = CreateUserFormArgs(service, userName, userId);
-                var existingUser = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
+                var user = RankSystemHelpers.CreateUserFromArgs(this, service, userName, userId);
+                var existingUser = RankSystemHelpers.GetExistingUser(user.Service, user.ServiceUserId);
                 if (existingUser is not null)
                 {
                     // Сохраняем актуальное имя пользователя из аргументов
@@ -254,8 +252,8 @@ public class CPHInline
         try
         {
             string service = RankSystemInternal.NormalizeService(this);
-            var user = CreateUserFormArgs(service);
-            var existingUser = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
+            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
+            var existingUser = RankSystemHelpers.GetExistingUser(user.Service, user.ServiceUserId);
             if (existingUser is not null)
             {
                 // Сохраняем актуальное имя пользователя из аргументов
@@ -354,8 +352,8 @@ public class CPHInline
         try
         {
             string service = RankSystemInternal.NormalizeService(this);
-            var user = CreateUserFormArgs(service);
-            var existingUser = DatabaseManager.GetUserData(filter: "Service = @Service AND ServiceUserId = @ServiceUserId", parameters: new[] { new SQLiteParameter("@Service", user.Service), new SQLiteParameter("@ServiceUserId", user.ServiceUserId) }).FirstOrDefault();
+            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
+            var existingUser = RankSystemHelpers.GetExistingUser(user.Service, user.ServiceUserId);
             if (existingUser is not null)
             {
                 // Сохраняем актуальное имя пользователя из аргументов
@@ -425,7 +423,7 @@ public class CPHInline
                     // Обновляем дневную статистику для потраченных монет
                     string today = DateTime.Now.ToString("yyyy-MM-dd");
                     string service = RankSystemInternal.NormalizeService(this);
-                    var user = CreateUserFormArgs(service);
+                    var user = RankSystemHelpers.CreateUserFromArgs(this, service);
                     DatabaseManager.AddToDailyStatsInternal(user.Service, user.ServiceUserId, today, user.UserName, spentCoins: actionCurrency);
 
                     return true;
@@ -489,64 +487,6 @@ public class CPHInline
         }
     }
 
-    public UserData CreateUserFormArgs(string service, string userName = null, string serviceUserId = null)
-    {
-        if (string.IsNullOrEmpty(serviceUserId))
-        {
-            if (!CPH.TryGetArg("userId", out serviceUserId))
-            {
-                CPH.TryGetArg("minichat.Data.UserID", out serviceUserId);
-            }
-        }
-
-        // Если serviceUserId все еще null или пустая строка, создаем временный ID
-        if (string.IsNullOrEmpty(serviceUserId))
-        {
-            CPH.LogWarn($"[RankSystem] ServiceUserId is NULL or empty for service {service}. Using temporary ID.");
-            // Создаем временный ID на основе имени пользователя или текущего времени
-            serviceUserId = $"temp_{(string.IsNullOrEmpty(userName) ? DateTime.Now.Ticks.ToString() : userName)}";
-        }
-
-        // Если UserName не передан, берем из аргументов
-        if (string.IsNullOrEmpty(userName))
-        {
-            if (args.ContainsKey("userName"))
-            {
-                userName = args["userName"].ToString().ToLower();
-            }
-            else if (args.ContainsKey("users"))
-            {
-                // Пытаемся получить имя из списка пользователей (для случаев с одним пользователем)
-                try
-                {
-                    var usersList = args["users"] as List<Dictionary<string, object>>;
-                    if (usersList != null && usersList.Count > 0 && usersList[0].ContainsKey("userName"))
-                    {
-                        userName = usersList[0]["userName"].ToString().ToLower();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    CPH.LogWarn($"[RankSystem] Failed to extract userName from users list: {ex.Message}");
-                }
-            }
-        }
-
-        // Если userName все еще null, используем временное имя
-        if (string.IsNullOrEmpty(userName))
-        {
-            CPH.LogWarn($"[RankSystem] UserName is NULL or empty for service {service}, userId {serviceUserId}. Using temporary name.");
-            userName = $"user_{serviceUserId}";
-        }
-
-        return new UserData
-        {
-            Service = service,
-            ServiceUserId = serviceUserId,
-            UserName = userName
-        };
-    }
-
     public bool SendReply()
     {
         string service = RankSystemInternal.NormalizeService(this);
@@ -586,13 +526,10 @@ public class CPHInline
                     continue;
 
                 // Получаем существующие данные пользователя
-                var existingUser = DatabaseManager.GetUserData(
-                    filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-                    parameters: new[] {
-                        new SQLiteParameter("@Service", data.Service == "Unknown" ? "vkvideolive" : data.Service.ToLower()),
-                        new SQLiteParameter("@ServiceUserId", data.UserID)
-                    }
-                ).FirstOrDefault();
+                var existingUser = RankSystemHelpers.GetExistingUser(
+                    data.Service == "Unknown" ? "vkvideolive" : data.Service.ToLower(),
+                    data.UserID
+                );
 
                 // Если пользователь существует и у него есть дата фоллоу, пропускаем
                 if (existingUser != null && existingUser.FollowDate != DateTime.MinValue)
@@ -633,7 +570,7 @@ public class CPHInline
         try
         {
             string service = RankSystemInternal.NormalizeService(this);
-            var user = CreateUserFormArgs(service);
+            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
 
             string date = DateTime.Now.ToString("yyyy-MM-dd");
 
@@ -670,7 +607,7 @@ public class CPHInline
         try
         {
             string service = RankSystemInternal.NormalizeService(this);
-            var user = CreateUserFormArgs(service);
+            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
 
             var endDate = DateTime.Now;
             var startDate = endDate.AddDays(-6); // 7 дней включая сегодня
@@ -711,7 +648,7 @@ public class CPHInline
         try
         {
             string service = RankSystemInternal.NormalizeService(this);
-            var user = CreateUserFormArgs(service);
+            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
 
             var currentDate = DateTime.Now;
 
@@ -761,7 +698,7 @@ public class CPHInline
         try
         {
             string service = RankSystemInternal.NormalizeService(this);
-            var user = CreateUserFormArgs(service);
+            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
 
             var endDate = DateTime.Now;
             var startDate = new DateTime(endDate.Year, endDate.Month, 1); // Первый день текущего месяца
@@ -802,7 +739,7 @@ public class CPHInline
         try
         {
             string service = RankSystemInternal.NormalizeService(this);
-            var user = CreateUserFormArgs(service);
+            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
 
             var endDate = DateTime.Now;
             var startDate = endDate.AddDays(-29); // 30 дней включая сегодня
@@ -843,7 +780,7 @@ public class CPHInline
         try
         {
             string service = RankSystemInternal.NormalizeService(this);
-            var user = CreateUserFormArgs(service);
+            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
 
             var endDate = DateTime.Now;
             var startDate = new DateTime(endDate.Year, 1, 1); // Первый день текущего года
@@ -884,7 +821,7 @@ public class CPHInline
         try
         {
             string service = RankSystemInternal.NormalizeService(this);
-            var user = CreateUserFormArgs(service);
+            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
 
             var endDate = DateTime.Now;
             var startDate = endDate.AddDays(-364); // 365 дней включая сегодня
@@ -934,7 +871,7 @@ public class CPHInline
             }
 
             // Получаем данные текущего пользователя из команды
-            var user = CreateUserFormArgs(service);
+            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
             if (string.IsNullOrEmpty(user.UserName))
             {
                 CPH.LogError($"[RankSystem] Не удалось получить имя пользователя из команды");
@@ -960,12 +897,7 @@ public class CPHInline
                             var timeQty = Convert.ToInt64(reader["TimeQty"] ?? 0);
 
                             // Получаем существующего пользователя из нашей базы
-                            var existingUser = DatabaseManager.GetUserData(
-                                filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-                                parameters: new[] {
-                                    new SQLiteParameter("@Service", user.Service),
-                                    new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-                                }).FirstOrDefault();
+                            var existingUser = RankSystemHelpers.GetExistingUser(user.Service, user.ServiceUserId);
 
                             if (existingUser != null)
                             {
@@ -1018,8 +950,23 @@ public class CPHInline
 // Вспомогательные методы для работы с системой рангов
 public static class RankSystemHelpers
 {
-    // Создание объекта пользователя из аргументов
-    // cph: Экземпляр CPHInline
+    // Получение существующего пользователя из базы данных
+    // service: Сервис пользователя
+    // serviceUserId: ID пользователя в сервисе
+    // Возвращает: Существующий пользователь или null
+    public static UserData GetExistingUser(string service, string serviceUserId)
+    {
+        return DatabaseManager.GetUserData(
+            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+            parameters: new[] {
+                new SQLiteParameter("@Service", service),
+                new SQLiteParameter("@ServiceUserId", serviceUserId)
+            }
+        ).FirstOrDefault();
+    }
+
+    // Создание объекта пользователя из аргументов (единый метод для всего проекта)
+    // cph: Экземпляр CPHInline для доступа к аргументам и логированию
     // service: Сервис (twitch, trovo, etc.)
     // userName: Имя пользователя (опционально)
     // serviceUserId: ID пользователя в сервисе (опционально)
@@ -1154,7 +1101,7 @@ public static class RankSystemInternal
     public static long GetCoins(CPHInline cph)
     {
         string service = NormalizeService(cph);
-        var user = cph.CreateUserFormArgs(service);
+        var user = RankSystemHelpers.CreateUserFromArgs(cph, service);
         var userData = DatabaseManager.GetUserData(
             filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
             parameters: new[] {
@@ -1172,7 +1119,7 @@ public static class RankSystemInternal
     public static long GetWatchTime(CPHInline cph)
     {
         string service = NormalizeService(cph);
-        var user = cph.CreateUserFormArgs(service);
+        var user = RankSystemHelpers.CreateUserFromArgs(cph, service);
         var userData = DatabaseManager.GetUserData(
             filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
             parameters: new[] {
@@ -1190,7 +1137,7 @@ public static class RankSystemInternal
     public static DateTime GetFollowDate(CPHInline cph)
     {
         string service = NormalizeService(cph);
-        var user = cph.CreateUserFormArgs(service);
+        var user = RankSystemHelpers.CreateUserFromArgs(cph, service);
         var userData = DatabaseManager.GetUserData(
             filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
             parameters: new[] {
@@ -1208,7 +1155,7 @@ public static class RankSystemInternal
     public static long GetMessageCount(CPHInline cph)
     {
         string service = NormalizeService(cph);
-        var user = cph.CreateUserFormArgs(service);
+        var user = RankSystemHelpers.CreateUserFromArgs(cph, service);
         var userData = DatabaseManager.GetUserData(
             filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
             parameters: new[] {
@@ -1226,7 +1173,7 @@ public static class RankSystemInternal
     public static string GetGameWhenFollow(CPHInline cph)
     {
         string service = NormalizeService(cph);
-        var user = cph.CreateUserFormArgs(service);
+        var user = RankSystemHelpers.CreateUserFromArgs(cph, service);
         var userData = DatabaseManager.GetUserData(
             filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
             parameters: new[] {
