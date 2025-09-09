@@ -1644,7 +1644,7 @@ public static class DatabaseManager
 
     // Методы для точечного обновления дневной статистики
 
-    public static void AddToDailyStats(string service, string serviceUserId, string date, string username, long watchTime = 0, long messageCount = 0, long coins = 0, long spentCoins = 0)
+    public static void AddToDailyStatsInternal(string service, string serviceUserId, string date, string username, long watchTime = 0, long messageCount = 0, long coins = 0, long spentCoins = 0)
     {
         _lock.EnterWriteLock();
         try
@@ -1755,42 +1755,6 @@ public static class DatabaseManager
             }
         }
     }
-
-    // Внутренний метод без блокировки для использования внутри уже заблокированных операций
-    public static void AddToDailyStatsInternal(string service, string serviceUserId, string date, string username, long watchTime = 0, long messageCount = 0, long coins = 0, long spentCoins = 0)
-    {
-        using (var connection = CreateConnection())
-        {
-            connection.Open();
-            using (var cmd = new SQLiteCommand(connection))
-            {
-                cmd.CommandText = @"
-                UPDATE DailyStats 
-                SET WatchTime = WatchTime + @WatchTime,
-                    MessageCount = MessageCount + @MessageCount,
-                    Coins = Coins + @Coins,
-                    SpentCoins = SpentCoins + @SpentCoins
-                WHERE Date = @Date AND ServiceUserId = @ServiceUserId AND Service = @Service";
-
-                cmd.Parameters.AddWithValue("@Date", date);
-                cmd.Parameters.AddWithValue("@ServiceUserId", serviceUserId);
-                cmd.Parameters.AddWithValue("@Service", service);
-                cmd.Parameters.AddWithValue("@WatchTime", watchTime);
-                cmd.Parameters.AddWithValue("@MessageCount", messageCount);
-                cmd.Parameters.AddWithValue("@Coins", coins);
-                cmd.Parameters.AddWithValue("@SpentCoins", spentCoins);
-
-                int rowsAffected = cmd.ExecuteNonQuery();
-
-                // Если запись не найдена, создаем новую
-                if (rowsAffected == 0)
-                {
-                    CreateDailyStatsInternal(service, serviceUserId, date, username, watchTime, messageCount, coins, spentCoins);
-                }
-            }
-        }
-    }
-
     public static void CreateDailyStats(string service, string serviceUserId, string date, string username, long watchTime = 0, long messageCount = 0, long coins = 0, long spentCoins = 0)
     {
         _lock.EnterWriteLock();
