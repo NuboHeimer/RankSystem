@@ -22,23 +22,143 @@ using System.Windows.Forms;
 using System.Drawing;
 using System.ComponentModel;
 
+// ============================================================================
+// КОНСТАНТЫ И КОНФИГУРАЦИЯ
+// ============================================================================
+
+/// <summary>
+/// Константы и настройки системы рангов
+/// </summary>
+public static class RankSystemConfig
+{
+    /// <summary>Время по умолчанию для добавления к просмотру (секунды)</summary>
+    public const int DEFAULT_TIME_TO_ADD = 60;
+
+    /// <summary>Количество монет по умолчанию для добавления</summary>
+    public const long DEFAULT_COINS_TO_ADD = 0;
+
+    /// <summary>Количество позиций в топе по умолчанию</summary>
+    public const int DEFAULT_TOP_COUNT = 3;
+
+    /// <summary>Путь к файлу базы данных</summary>
+    public const string DB_PATH = "RankSystem.db";
+
+    /// <summary>Таймаут для операций с базой данных (миллисекунды)</summary>
+    public const int DB_TIMEOUT = 5000;
+
+    /// <summary>Размер кэша базы данных (страницы)</summary>
+    public const int DB_CACHE_SIZE = -2000;
+}
+
+// ============================================================================
+// МОДЕЛИ ДАННЫХ
+// ============================================================================
+
+/// <summary>
+/// Класс для десериализации данных из Live.json
+/// </summary>
+public class LiveData
+{
+    public string Type { get; set; }
+    public string Service { get; set; }
+    public string Date { get; set; }
+    public string ID { get; set; }
+    public string UserID { get; set; }
+    public string UserName { get; set; }
+    public AvatarData Avatar { get; set; }
+}
+
+/// <summary>
+/// Данные аватара пользователя
+/// </summary>
+public class AvatarData
+{
+    public string Default { get; set; }
+    public string Large { get; set; }
+}
+
+/// <summary>
+/// Основная модель пользователя в системе рангов
+/// </summary>
+public class UserData
+{
+    public string UUID { get; set; }
+    public string Service { get; set; }
+    public string ServiceUserId { get; set; }
+    public string UserName { get; set; }
+    public long WatchTime { get; set; }
+    public DateTime FollowDate { get; set; } = DateTime.MinValue;
+    public long MessageCount { get; set; }
+    public long Coins { get; set; }
+    public string GameWhenFollow { get; set; }
+}
+
+/// <summary>
+/// История изменений имени пользователя
+/// </summary>
+public class UserNameHistory
+{
+    public long Id { get; set; }
+    public string UUID { get; set; }
+    public string Service { get; set; }
+    public string ServiceUserId { get; set; }
+    public string OldUserName { get; set; }
+    public string NewUserName { get; set; }
+    public DateTime ChangeDate { get; set; }
+}
+
+/// <summary>
+/// Ежедневная статистика пользователя
+/// </summary>
+public class DailyStats
+{
+    public long Id { get; set; }
+    public string Date { get; set; } // YYYY-MM-DD формат
+    public string ServiceUserId { get; set; }
+    public string Service { get; set; }
+    public string Username { get; set; }
+    public long WatchTime { get; set; }
+    public long MessageCount { get; set; }
+    public long Coins { get; set; }
+    public long SpentCoins { get; set; }
+}
+
+// ============================================================================
+// ОСНОВНОЙ КЛАСС CPHInline
+// ============================================================================
+
+/// <summary>
+/// Основной класс для интеграции с Streamer.bot
+/// Содержит публичные методы для вызова из внешней среды
+/// </summary>
 public class CPHInline
 {
-    private const int DEFAULT_TIME_TO_ADD = 60; // по умолчанию мы добавляем 60 скунд к времени просмотра.
-    private const long DEFAULT_COINS_TO_ADD = 0; // по умолчанию мы добавляем 0 монет.
-    private const int DEFAULT_TOP_COUNT = 3; // по умолчанию задаётся 3 позиции в топе.
-
+    /// <summary>
+    /// Инициализация системы рангов
+    /// Создает базу данных и необходимые таблицы
+    /// </summary>
+    /// <returns>Всегда true</returns>
     public void Init()
     {
         DatabaseManager.InitializeDatabase();
     }
 
+    /// <summary>
+    /// Удаление базы данных
+    /// Полностью очищает все данные и пересоздает структуру
+    /// </summary>
+    /// <returns>Всегда true</returns>
     public bool DropDatabase()
     {
         DatabaseManager.DropDatabase();
         return true;
     }
 
+    /// <summary>
+    /// Добавление сообщения пользователю
+    /// Увеличивает счетчик сообщений и добавляет монеты
+    /// </summary>
+    /// <returns>true если операция успешна, false при ошибке</returns>
     public bool AddMessageCount()
     {
         try
@@ -70,7 +190,7 @@ public class CPHInline
             }
 
             if (!CPH.TryGetArg("coinsToAdd", out long coinsToAdd))
-                coinsToAdd = DEFAULT_COINS_TO_ADD;
+                coinsToAdd = RankSystemConfig.DEFAULT_COINS_TO_ADD;
             user.Coins += coinsToAdd;
             DatabaseManager.UpsertUser(user);
 
@@ -86,6 +206,11 @@ public class CPHInline
         }
     }
 
+    /// <summary>
+    /// Добавление времени просмотра для списка пользователей
+    /// Обновляет время просмотра и добавляет монеты для всех пользователей в списке
+    /// </summary>
+    /// <returns>true если операция успешна, false при ошибке</returns>
     public bool AddWatchTime()
     {
         try
@@ -105,7 +230,7 @@ public class CPHInline
 
             string service = RankSystemInternal.NormalizeService(this);
             if (!CPH.TryGetArg("timeToAdd", out int timeToAdd))
-                timeToAdd = DEFAULT_TIME_TO_ADD;
+                timeToAdd = RankSystemConfig.DEFAULT_TIME_TO_ADD;
             foreach (var viewer in currentViewers)
             {
                 string userName = viewer["userName"].ToString().ToLower();
@@ -124,7 +249,7 @@ public class CPHInline
                     }
                 }
                 if (!CPH.TryGetArg("coinsToAdd", out long coinsToAdd))
-                    coinsToAdd = DEFAULT_COINS_TO_ADD;
+                    coinsToAdd = RankSystemConfig.DEFAULT_COINS_TO_ADD;
                 user.Coins += coinsToAdd;
                 user.WatchTime += timeToAdd;
                 DatabaseManager.UpsertUser(user);
@@ -143,6 +268,11 @@ public class CPHInline
         }
     }
 
+    /// <summary>
+    /// Добавление даты подписки пользователя
+    /// Устанавливает дату подписки и добавляет монеты
+    /// </summary>
+    /// <returns>true если операция успешна, false при ошибке</returns>
     public bool AddFollowDate()
     {
         try
@@ -162,7 +292,7 @@ public class CPHInline
                 }
             }
             if (!CPH.TryGetArg("coinsToAdd", out long coinsToAdd))
-                coinsToAdd = DEFAULT_COINS_TO_ADD;
+                coinsToAdd = RankSystemConfig.DEFAULT_COINS_TO_ADD;
             if (CPH.TryGetArg("game", out string game))
                 user.GameWhenFollow = game; // записываем категорию стрима, если она есть аргументах.
             if (!CPH.TryGetArg("minichat.Data.Date", out DateTime followDate))
@@ -179,6 +309,10 @@ public class CPHInline
         }
     }
 
+    /// <summary>
+    /// Получение количества сообщений пользователя
+    /// </summary>
+    /// <returns>true если операция успешна, false при ошибке</returns>
     public bool GetMessageCount()
     {
         try
@@ -194,6 +328,10 @@ public class CPHInline
         }
     }
 
+    /// <summary>
+    /// Получение времени просмотра пользователя
+    /// </summary>
+    /// <returns>true если операция успешна, false при ошибке</returns>
     public bool GetWatchTime()
     {
         try
@@ -257,9 +395,9 @@ public class CPHInline
                     user.UserName = newUserName;
                 }
             }
-            long coinsFromArgs = DEFAULT_COINS_TO_ADD;
+            long coinsFromArgs = RankSystemConfig.DEFAULT_COINS_TO_ADD;
             if (!CPH.TryGetArg("coinsToAdd", out coinsFromArgs))
-                coinsFromArgs = DEFAULT_COINS_TO_ADD;
+                coinsFromArgs = RankSystemConfig.DEFAULT_COINS_TO_ADD;
             user.Coins += coinsFromArgs;
             DatabaseManager.UpsertUser(user);
 
@@ -351,7 +489,7 @@ public class CPHInline
 
             if (!CPH.TryGetArg("topCount", out int topCount))
             {
-                topCount = 3;
+                topCount = RankSystemConfig.DEFAULT_TOP_COUNT;
             }
 
             var (fieldName, displayName) = topType switch
@@ -901,65 +1039,406 @@ public class CPHInline
     }
 }
 
-// Класс для десериализации данных из Live.json
-public class LiveData
+// ============================================================================
+// ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ И УТИЛИТЫ
+// ============================================================================
+
+/// <summary>
+/// Вспомогательные методы для работы с системой рангов
+/// </summary>
+public static class RankSystemHelpers
 {
-    public string Type { get; set; }
-    public string Service { get; set; }
-    public string Date { get; set; }
-    public string ID { get; set; }
-    public string UserID { get; set; }
-    public string UserName { get; set; }
-    public AvatarData Avatar { get; set; }
+    /// <summary>
+    /// Создание объекта пользователя из аргументов
+    /// </summary>
+    /// <param name="cph">Экземпляр CPHInline</param>
+    /// <param name="service">Сервис (twitch, trovo, etc.)</param>
+    /// <param name="userName">Имя пользователя (опционально)</param>
+    /// <param name="serviceUserId">ID пользователя в сервисе (опционально)</param>
+    /// <returns>Объект UserData</returns>
+    public static UserData CreateUserFromArgs(CPHInline cph, string service, string userName = null, string serviceUserId = null)
+    {
+        if (string.IsNullOrEmpty(serviceUserId))
+        {
+            if (!cph.CPH.TryGetArg("userId", out serviceUserId))
+            {
+                cph.CPH.TryGetArg("minichat.Data.UserID", out serviceUserId);
+            }
+        }
+
+        // Если serviceUserId все еще null или пустая строка, создаем временный ID
+        if (string.IsNullOrEmpty(serviceUserId))
+        {
+            cph.CPH.LogWarn($"[RankSystem] ServiceUserId is NULL or empty for service {service}. Using temporary ID.");
+            serviceUserId = $"temp_{(string.IsNullOrEmpty(userName) ? DateTime.Now.Ticks.ToString() : userName)}";
+        }
+
+        // Если UserName не передан, берем из аргументов
+        if (string.IsNullOrEmpty(userName))
+        {
+            if (cph.args.ContainsKey("userName"))
+            {
+                userName = cph.args["userName"].ToString().ToLower();
+            }
+            else if (cph.args.ContainsKey("users"))
+            {
+                try
+                {
+                    var usersList = cph.args["users"] as List<Dictionary<string, object>>;
+                    if (usersList != null && usersList.Count > 0 && usersList[0].ContainsKey("userName"))
+                    {
+                        userName = usersList[0]["userName"].ToString().ToLower();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    cph.CPH.LogWarn($"[RankSystem] Failed to extract userName from users list: {ex.Message}");
+                }
+            }
+        }
+
+        // Если userName все еще null, используем временное имя
+        if (string.IsNullOrEmpty(userName))
+        {
+            cph.CPH.LogWarn($"[RankSystem] UserName is NULL or empty for service {service}, userId {serviceUserId}. Using temporary name.");
+            userName = $"user_{serviceUserId}";
+        }
+
+        return new UserData
+        {
+            Service = service,
+            ServiceUserId = serviceUserId,
+            UserName = userName
+        };
+    }
+
+    /// <summary>
+    /// Отправка ответа пользователю через соответствующий сервис
+    /// </summary>
+    /// <param name="cph">Экземпляр CPHInline</param>
+    /// <param name="service">Сервис для отправки</param>
+    /// <param name="reply">Текст ответа</param>
+    /// <returns>true если отправка успешна</returns>
+    public static bool SendReplyToService(CPHInline cph, string service, string reply)
+    {
+        if (string.IsNullOrEmpty(reply))
+        {
+            reply = "Стример забыл настроить ответ на команду!";
+        }
+
+        try
+        {
+            if (service.Equals("twitch", StringComparison.OrdinalIgnoreCase))
+                cph.CPH.SendMessage(reply);
+            else if (service.Equals("trovo", StringComparison.OrdinalIgnoreCase))
+                cph.CPH.SendTrovoMessage(reply);
+            else
+            {
+                cph.CPH.SetArgument("message", reply);
+                cph.CPH.ExecuteMethod("MiniChat Method Collection", "SendMessageReply");
+            }
+            return true;
+        }
+        catch (Exception ex)
+        {
+            cph.CPH.LogError($"[RankSystem] SendReplyToService Error: {ex}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Валидация данных пользователя
+    /// </summary>
+    /// <param name="user">Объект пользователя для валидации</param>
+    /// <returns>true если данные валидны</returns>
+    public static bool ValidateUserData(UserData user)
+    {
+        if (user == null)
+        {
+            return false;
+        }
+
+        if (string.IsNullOrEmpty(user.Service))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrEmpty(user.ServiceUserId))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrEmpty(user.UserName))
+        {
+            return false;
+        }
+
+        return true;
+    }
 }
 
-public class AvatarData
+// ============================================================================
+// ВНУТРЕННЯЯ ЛОГИКА СИСТЕМЫ РАНГОВ
+// ============================================================================
+
+/// <summary>
+/// Внутренние методы для работы с системой рангов
+/// </summary>
+public static class RankSystemInternal
 {
-    public string Default { get; set; }
-    public string Large { get; set; }
+    /// <summary>
+    /// Получение количества монет пользователя
+    /// </summary>
+    /// <param name="cph">Экземпляр CPHInline</param>
+    /// <returns>Количество монет</returns>
+    public static long GetCoins(CPHInline cph)
+    {
+        string service = NormalizeService(cph);
+        var user = cph.CreateUserFormArgs(service);
+        var userData = DatabaseManager.GetUserData(
+            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+            parameters: new[] {
+                new SQLiteParameter("@Service", user.Service),
+                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+            }
+        ).FirstOrDefault();
+
+        return userData?.Coins ?? 0;
+    }
+
+    /// <summary>
+    /// Получение времени просмотра пользователя
+    /// </summary>
+    /// <param name="cph">Экземпляр CPHInline</param>
+    /// <returns>Время просмотра в секундах</returns>
+    public static long GetWatchTime(CPHInline cph)
+    {
+        string service = NormalizeService(cph);
+        var user = cph.CreateUserFormArgs(service);
+        var userData = DatabaseManager.GetUserData(
+            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+            parameters: new[] {
+                new SQLiteParameter("@Service", user.Service),
+                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+            }
+        ).FirstOrDefault();
+
+        return userData?.WatchTime ?? 0;
+    }
+
+    /// <summary>
+    /// Получение даты подписки пользователя
+    /// </summary>
+    /// <param name="cph">Экземпляр CPHInline</param>
+    /// <returns>Дата подписки или DateTime.MinValue если не подписан</returns>
+    public static DateTime GetFollowDate(CPHInline cph)
+    {
+        string service = NormalizeService(cph);
+        var user = cph.CreateUserFormArgs(service);
+        var userData = DatabaseManager.GetUserData(
+            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+            parameters: new[] {
+                new SQLiteParameter("@Service", user.Service),
+                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+            }
+        ).FirstOrDefault();
+
+        return userData?.FollowDate ?? DateTime.MinValue;
+    }
+
+    /// <summary>
+    /// Получение количества сообщений пользователя
+    /// </summary>
+    /// <param name="cph">Экземпляр CPHInline</param>
+    /// <returns>Количество сообщений</returns>
+    public static long GetMessageCount(CPHInline cph)
+    {
+        string service = NormalizeService(cph);
+        var user = cph.CreateUserFormArgs(service);
+        var userData = DatabaseManager.GetUserData(
+            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+            parameters: new[] {
+                new SQLiteParameter("@Service", user.Service),
+                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+            }
+        ).FirstOrDefault();
+
+        return userData?.MessageCount ?? 0;
+    }
+
+    /// <summary>
+    /// Получение игры при подписке пользователя
+    /// </summary>
+    /// <param name="cph">Экземпляр CPHInline</param>
+    /// <returns>Название игры или пустая строка</returns>
+    public static string GetGameWhenFollow(CPHInline cph)
+    {
+        string service = NormalizeService(cph);
+        var user = cph.CreateUserFormArgs(service);
+        var userData = DatabaseManager.GetUserData(
+            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+            parameters: new[] {
+                new SQLiteParameter("@Service", user.Service),
+                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+            }
+        ).FirstOrDefault();
+
+        return userData?.GameWhenFollow ?? string.Empty;
+    }
+
+    /// <summary>
+    /// Нормализация названия сервиса
+    /// </summary>
+    /// <param name="cph">Экземпляр CPHInline</param>
+    /// <returns>Нормализованное название сервиса</returns>
+    public static string NormalizeService(CPHInline cph)
+    {
+        if (!cph.CPH.TryGetArg("eventSource", out string service))
+            if (!cph.CPH.TryGetArg("commandSource", out service))
+                ;
+
+        if (service.Equals("misc"))
+        {
+            if (cph.args.ContainsKey("timerId") && (cph.args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || cph.args["timerName"].ToString().ToLower().Equals("vkvideolive")))
+            {
+                return "vkvideolive";
+            }
+        }
+
+        if (service.Equals("command"))
+            service = cph.args["commandSource"].ToString();
+        return service.Equals("vkplay", StringComparison.OrdinalIgnoreCase) ? "vkvideolive" : service.ToLower();
+    }
+
+    /// <summary>
+    /// Форматирование значения пользователя для отображения
+    /// </summary>
+    /// <param name="user">Пользователь</param>
+    /// <param name="field">Поле для форматирования</param>
+    /// <returns>Отформатированная строка</returns>
+    public static string FormatValue(UserData user, string field)
+    {
+        return field switch
+        {
+            "WatchTime" => FormatDateTime(user.WatchTime),
+            "MessageCount" => $"{user.MessageCount} сообщ.",
+            "Coins" => $"{user.Coins} монет",
+            _ => "0"
+        };
+    }
+
+    /// <summary>
+    /// Форматирование времени в читаемый вид
+    /// </summary>
+    /// <param name="totalSeconds">Общее количество секунд</param>
+    /// <returns>Отформатированная строка времени</returns>
+    public static string FormatDateTime(long totalSeconds)
+    {
+        int years = 0;
+        int months = 0;
+        int days = (int)(totalSeconds / (60 * 60 * 24));
+        int hours = (int)((totalSeconds % (60 * 60 * 24)) / (60 * 60));
+        int minutes = (int)((totalSeconds % (60 * 60)) / 60);
+        int seconds = (int)(totalSeconds % 60);
+
+        if (days >= 365)
+        {
+            years = days / 365;
+            days %= 365;
+        }
+
+        if (days >= 30)
+        {
+            months = days / 30;
+            days %= 30;
+        }
+
+        string result = "";
+        if (years > 0)
+            result += $"{years.ToString()} {GetYearWord(years)} ";
+        if (months > 0)
+            result += $"{months.ToString()} {GetMonthWord(months)} ";
+        if (days > 0)
+            result += $"{days.ToString()} {GetDayWord(days)} ";
+        if (hours > 0)
+            result += $"{hours.ToString()} {GetHourWord(hours)} ";
+        if (minutes > 0)
+            result += $"{minutes.ToString()} {GetMinuteWord(minutes)} ";
+        if (seconds > 0)
+            result += $"{seconds.ToString()} {GetSecondWord(seconds)}";
+        return result.Trim();
+    }
+
+    #region Вспомогательные методы для склонения слов
+
+    private static string GetYearWord(int count)
+    {
+        if (count % 10 == 1 && count % 100 != 11)
+            return "год";
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "года";
+        return "лет";
+    }
+
+    private static string GetMonthWord(int count)
+    {
+        if (count % 10 == 1 && count % 100 != 11)
+            return "месяц";
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "месяца";
+        return "месяцев";
+    }
+
+    private static string GetDayWord(int count)
+    {
+        if (count % 10 == 1 && count % 100 != 11)
+            return "день";
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "дня";
+        return "дней";
+    }
+
+    private static string GetHourWord(int count)
+    {
+        if (count % 10 == 1 && count % 100 != 11)
+            return "час";
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "часа";
+        return "часов";
+    }
+
+    private static string GetMinuteWord(int count)
+    {
+        if (count % 10 == 1 && count % 100 != 11)
+            return "минуту";
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "минуты";
+        return "минут";
+    }
+
+    private static string GetSecondWord(int count)
+    {
+        if (count % 10 == 1 && count % 100 != 11)
+            return "секунду";
+        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
+            return "секунды";
+        return "секунд";
+    }
+
+    #endregion
 }
 
-public class UserData
-{
-    public string UUID { get; set; }
-    public string Service { get; set; }
-    public string ServiceUserId { get; set; }
-    public string UserName { get; set; }
-    public long WatchTime { get; set; }
-    public DateTime FollowDate { get; set; } = DateTime.MinValue;
-    public long MessageCount { get; set; }
-    public long Coins { get; set; }
-    public string GameWhenFollow { get; set; }
-}
+// ============================================================================
+// РАБОТА С БАЗОЙ ДАННЫХ
+// ============================================================================
 
-public class UserNameHistory
-{
-    public long Id { get; set; }
-    public string UUID { get; set; }
-    public string Service { get; set; }
-    public string ServiceUserId { get; set; }
-    public string OldUserName { get; set; }
-    public string NewUserName { get; set; }
-    public DateTime ChangeDate { get; set; }
-}
-
-public class DailyStats
-{
-    public long Id { get; set; }
-    public string Date { get; set; } // YYYY-MM-DD формат
-    public string ServiceUserId { get; set; }
-    public string Service { get; set; }
-    public string Username { get; set; }
-    public long WatchTime { get; set; }
-    public long MessageCount { get; set; }
-    public long Coins { get; set; }
-    public long SpentCoins { get; set; }
-}
-
+/// <summary>
+/// Менеджер для работы с базой данных системы рангов
+/// </summary>
 public static class DatabaseManager
 {
-    // TODO: Надо что-то придумать с хардкодом пути до базы. Но, на первый взгляд, отсюда не получить аргументы среды выполнения.
-    private static readonly string DbPath = "RankSystem.db";
+    /// <summary>Путь к файлу базы данных</summary>
+    private static readonly string DbPath = RankSystemConfig.DB_PATH;
     private static readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private static readonly ReaderWriterLockSlim _historyLock = new ReaderWriterLockSlim();
     private static SQLiteConnection CreateConnection()
@@ -978,11 +1457,11 @@ public static class DatabaseManager
                 connection.Open();
                 using (var cmd = new SQLiteCommand(connection))
                 {
-                    cmd.CommandText = @"
+                    cmd.CommandText = $@"
                     PRAGMA journal_mode = WAL;
                     PRAGMA synchronous = NORMAL;
-                    PRAGMA busy_timeout = 5000;
-                    PRAGMA cache_size = -2000;
+                    PRAGMA busy_timeout = {RankSystemConfig.DB_TIMEOUT};
+                    PRAGMA cache_size = {RankSystemConfig.DB_CACHE_SIZE};
                     PRAGMA temp_store = MEMORY;
                     PRAGMA wal_autocheckpoint = 1000;";
                     cmd.ExecuteNonQuery();
@@ -1846,205 +2325,13 @@ public static class DatabaseManager
     }
 }
 
-public class RankSystemInternal
-{
-    public static long GetCoins(CPHInline cph)
-    {
-        string service = NormalizeService(cph);
-        var user = cph.CreateUserFormArgs(service);
-        var userData = DatabaseManager.GetUserData(
-            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-            parameters: new[] {
-                new SQLiteParameter("@Service", user.Service),
-                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-            }
-        ).FirstOrDefault();
+// ============================================================================
+// UI КОМПОНЕНТЫ
+// ============================================================================
 
-        return userData?.Coins ?? 0;
-    }
-
-    public static long GetWatchTime(CPHInline cph)
-    {
-        string service = NormalizeService(cph);
-        var user = cph.CreateUserFormArgs(service);
-        var userData = DatabaseManager.GetUserData(
-            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-            parameters: new[] {
-                new SQLiteParameter("@Service", user.Service),
-                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-            }
-        ).FirstOrDefault();
-
-        return userData?.WatchTime ?? 0;
-    }
-
-    public static DateTime GetFollowDate(CPHInline cph)
-    {
-        string service = NormalizeService(cph);
-        var user = cph.CreateUserFormArgs(service);
-        var userData = DatabaseManager.GetUserData(
-            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-            parameters: new[] {
-                new SQLiteParameter("@Service", user.Service),
-                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-            }
-        ).FirstOrDefault();
-
-        return userData?.FollowDate ?? DateTime.MinValue;
-    }
-
-    public static long GetMessageCount(CPHInline cph)
-    {
-        string service = NormalizeService(cph);
-        var user = cph.CreateUserFormArgs(service);
-        var userData = DatabaseManager.GetUserData(
-            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-            parameters: new[] {
-                new SQLiteParameter("@Service", user.Service),
-                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-            }
-        ).FirstOrDefault();
-
-        return userData?.MessageCount ?? 0;
-    }
-
-    public static string GetGameWhenFollow(CPHInline cph)
-    {
-        string service = NormalizeService(cph);
-        var user = cph.CreateUserFormArgs(service);
-        var userData = DatabaseManager.GetUserData(
-            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-            parameters: new[] {
-                new SQLiteParameter("@Service", user.Service),
-                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-            }
-        ).FirstOrDefault();
-
-        return userData?.GameWhenFollow ?? string.Empty;
-    }
-
-    public static string NormalizeService(CPHInline cph)
-    {
-        // TODO: Refactor. Выглядит как говно.
-        if (!cph.CPH.TryGetArg("eventSource", out string service))
-            if (!cph.CPH.TryGetArg("commandSource", out service))
-                ;
-        if (service.Equals("misc"))
-        {
-            if (cph.args.ContainsKey("timerId") && (cph.args["timerId"].ToString().Equals("1da45ce2-2383-4431-8b42-b4f3314d2d79") || cph.args["timerName"].ToString().ToLower().Equals("vkvideolive")))
-            {
-                return "vkvideolive";
-            }
-        }
-
-        if (service.Equals("command"))
-            service = cph.args["commandSource"].ToString();
-        return service.Equals("vkplay", StringComparison.OrdinalIgnoreCase) ? "vkvideolive" : service.ToLower();
-    }
-
-    public static string FormatValue(UserData user, string field)
-    {
-        return field switch
-        {
-            "WatchTime" => FormatDateTime(user.WatchTime),
-            "MessageCount" => $"{user.MessageCount} сообщ.",
-            "Coins" => $"{user.Coins} монет",
-            _ => "0"
-        };
-    }
-
-    public static string FormatDateTime(long totalSeconds)
-    {
-        // Преобразуем общее количество секунд в годы, месяцы, дни, часы, минуты и секунды.
-        int years = 0;
-        int months = 0;
-        int days = (int)(totalSeconds / (60 * 60 * 24));
-        int hours = (int)((totalSeconds % (60 * 60 * 24)) / (60 * 60));
-        int minutes = (int)((totalSeconds % (60 * 60)) / 60);
-        int seconds = (int)(totalSeconds % 60);
-        if (days >= 365)
-        {
-            years = days / 365; // Примерно считаем годы
-            days %= 365; // Остаток дней после вычисления лет
-        }
-
-        if (days >= 30)
-        {
-            months = days / 30;
-            days %= 30; // Остаток дней после вычисления месяцев
-        }
-
-        string result = "";
-        if (years > 0)
-            result += $"{years.ToString()} {GetYearWord(years)} ";
-        if (months > 0)
-            result += $"{months.ToString()} {GetMonthWord(months)} ";
-        if (days > 0)
-            result += $"{days.ToString()} {GetDayWord(days)} ";
-        if (hours > 0)
-            result += $"{hours.ToString()} {GetHourWord(hours)} ";
-        if (minutes > 0)
-            result += $"{minutes.ToString()} {GetMinuteWord(minutes)} ";
-        if (seconds > 0)
-            result += $"{seconds.ToString()} {GetSecondWord(seconds)}";
-        return result.Trim(); // Убираем лишние пробелы в конце
-    }
-
-    static string GetYearWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11)
-            return "год";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
-            return "года";
-        return "лет";
-    }
-
-    static string GetMonthWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11)
-            return "месяц";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
-            return "месяца";
-        return "месяцев";
-    }
-
-    static string GetDayWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11)
-            return "день";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
-            return "дня";
-        return "дней";
-    }
-
-    static string GetHourWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11)
-            return "час";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
-            return "часа";
-        return "часов";
-    }
-
-    static string GetMinuteWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11)
-            return "минуту";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
-            return "минуты";
-        return "минут";
-    }
-
-    static string GetSecondWord(int count)
-    {
-        if (count % 10 == 1 && count % 100 != 11)
-            return "секунду";
-        if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20))
-            return "секунды";
-        return "секунд";
-    }
-}
-
+/// <summary>
+/// Форма для редактирования базы данных системы рангов
+/// </summary>
 public class RankSystemForm : Form
 {
     private DataGridView usersGrid = new DataGridView();
