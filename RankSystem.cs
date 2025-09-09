@@ -335,13 +335,8 @@ public class CPHInline
 
     public bool ClearUsersCoins()
     {
-        List<UserData> users = DatabaseManager.GetUserData();
-        foreach (UserData user in users)
-        {
-            user.Coins = 0 - user.Coins;
-            DatabaseManager.UpsertUser(user);
-        }
-
+        int rowsAffected = DatabaseManager.ClearAllUsersCoins();
+        CPH.LogInfo($"[RankSystem] Cleared coins for {rowsAffected} users");
         return true;
     }
 
@@ -1531,6 +1526,32 @@ public static class DatabaseManager
                     cmd.Parameters.AddWithValue("@Service", user.Service);
                     cmd.Parameters.AddWithValue("@ServiceUserId", user.ServiceUserId);
                     cmd.ExecuteNonQuery();
+                }
+            }
+        }
+        finally
+        {
+            _lock.ExitWriteLock();
+        }
+    }
+
+    public static int ClearAllUsersCoins()
+    {
+        _lock.EnterWriteLock();
+        try
+        {
+            using (var connection = CreateConnection())
+            {
+                connection.Open();
+                using (var transaction = connection.BeginTransaction())
+                {
+                    using (var cmd = new SQLiteCommand("UPDATE Users SET Coins = 0", connection))
+                    {
+                        cmd.Transaction = transaction;
+                        int rowsAffected = cmd.ExecuteNonQuery();
+                        transaction.Commit();
+                        return rowsAffected;
+                    }
                 }
             }
         }
