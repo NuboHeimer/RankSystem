@@ -52,7 +52,7 @@ public static class RankSystemConfig
 // МОДЕЛИ ДАННЫХ
 // ============================================================================
 
-// Класс для десериализации данных из Live.json from MiniChat
+// Класс для десериализации данных из Live.json из MiniChat
 public class LiveData
 {
     public string Type { get; set; }
