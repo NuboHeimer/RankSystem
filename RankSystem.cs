@@ -1,11 +1,11 @@
-///----------------------------------------------------------------------------
-///   Module:       RankSystem
-///   Author:       NuboHeimer (https://live.vkvideo.ru/nuboheimer)
-///   Email:        nuboheimer@yandex.ru
-///   Help:         https://t.me/nuboheimersb/5
-///----------------------------------------------------------------------------
+//----------------------------------------------------------------------------
+//   Module:       RankSystem
+//   Author:       NuboHeimer (https://live.vkvideo.ru/nuboheimer)
+//   Email:        nuboheimer@yandex.ru
+//   Help:         https://t.me/nuboheimersb/5
+//----------------------------------------------------------------------------
 
-///   Version:      0.11.0
+//   Version:      0.11.0
 
 using System;
 using System.Collections.Generic;
@@ -26,27 +26,25 @@ using System.ComponentModel;
 // КОНСТАНТЫ И КОНФИГУРАЦИЯ
 // ============================================================================
 
-/// <summary>
-/// Константы и настройки системы рангов
-/// </summary>
+// Константы и настройки системы рангов
 public static class RankSystemConfig
 {
-    /// <summary>Время по умолчанию для добавления к просмотру (секунды)</summary>
+    // Время по умолчанию для добавления к просмотру (секунды)
     public const int DEFAULT_TIME_TO_ADD = 60;
 
-    /// <summary>Количество монет по умолчанию для добавления</summary>
+    // Количество монет по умолчанию для добавления
     public const long DEFAULT_COINS_TO_ADD = 0;
 
-    /// <summary>Количество позиций в топе по умолчанию</summary>
+    // Количество позиций в топе по умолчанию
     public const int DEFAULT_TOP_COUNT = 3;
 
-    /// <summary>Путь к файлу базы данных</summary>
+    // Путь к файлу базы данных
     public const string DB_PATH = "RankSystem.db";
 
-    /// <summary>Таймаут для операций с базой данных (миллисекунды)</summary>
+    // Таймаут для операций с базой данных (миллисекунды)
     public const int DB_TIMEOUT = 5000;
 
-    /// <summary>Размер кэша базы данных (страницы)</summary>
+    // Размер кэша базы данных (страницы)
     public const int DB_CACHE_SIZE = -2000;
 }
 
@@ -54,9 +52,7 @@ public static class RankSystemConfig
 // МОДЕЛИ ДАННЫХ
 // ============================================================================
 
-/// <summary>
-/// Класс для десериализации данных из Live.json
-/// </summary>
+// Класс для десериализации данных из Live.json
 public class LiveData
 {
     public string Type { get; set; }
@@ -68,18 +64,14 @@ public class LiveData
     public AvatarData Avatar { get; set; }
 }
 
-/// <summary>
-/// Данные аватара пользователя
-/// </summary>
+// Данные аватара пользователя
 public class AvatarData
 {
     public string Default { get; set; }
     public string Large { get; set; }
 }
 
-/// <summary>
-/// Основная модель пользователя в системе рангов
-/// </summary>
+// Основная модель пользователя в системе рангов
 public class UserData
 {
     public string UUID { get; set; }
@@ -93,9 +85,7 @@ public class UserData
     public string GameWhenFollow { get; set; }
 }
 
-/// <summary>
-/// История изменений имени пользователя
-/// </summary>
+// История изменений имени пользователя
 public class UserNameHistory
 {
     public long Id { get; set; }
@@ -107,9 +97,7 @@ public class UserNameHistory
     public DateTime ChangeDate { get; set; }
 }
 
-/// <summary>
-/// Ежедневная статистика пользователя
-/// </summary>
+// Ежедневная статистика пользователя
 public class DailyStats
 {
     public long Id { get; set; }
@@ -127,38 +115,30 @@ public class DailyStats
 // ОСНОВНОЙ КЛАСС CPHInline
 // ============================================================================
 
-/// <summary>
-/// Основной класс для интеграции с Streamer.bot
-/// Содержит публичные методы для вызова из внешней среды
-/// </summary>
+// Основной класс для интеграции с Streamer.bot
+// Содержит публичные методы для вызова из внешней среды
 public class CPHInline
 {
-    /// <summary>
-    /// Инициализация системы рангов
-    /// Создает базу данных и необходимые таблицы
-    /// </summary>
-    /// <returns>Всегда true</returns>
+    // Инициализация системы рангов
+    // Создает базу данных и необходимые таблицы
+    // Возвращает: Всегда true
     public void Init()
     {
         DatabaseManager.InitializeDatabase();
     }
 
-    /// <summary>
-    /// Удаление базы данных
-    /// Полностью очищает все данные и пересоздает структуру
-    /// </summary>
-    /// <returns>Всегда true</returns>
+    // Удаление базы данных
+    // Полностью очищает все данные и пересоздает структуру
+    // Возвращает: Всегда true
     public bool DropDatabase()
     {
         DatabaseManager.DropDatabase();
         return true;
     }
 
-    /// <summary>
-    /// Добавление сообщения пользователю
-    /// Увеличивает счетчик сообщений и добавляет монеты
-    /// </summary>
-    /// <returns>true если операция успешна, false при ошибке</returns>
+    // Добавление сообщения пользователю
+    // Увеличивает счетчик сообщений и добавляет монеты
+    // Возвращает: true если операция успешна, false при ошибке
     public bool AddMessageCount()
     {
         try
@@ -206,11 +186,9 @@ public class CPHInline
         }
     }
 
-    /// <summary>
-    /// Добавление времени просмотра для списка пользователей
-    /// Обновляет время просмотра и добавляет монеты для всех пользователей в списке
-    /// </summary>
-    /// <returns>true если операция успешна, false при ошибке</returns>
+    // Добавление времени просмотра для списка пользователей
+    // Обновляет время просмотра и добавляет монеты для всех пользователей в списке
+    // Возвращает: true если операция успешна, false при ошибке
     public bool AddWatchTime()
     {
         try
@@ -268,11 +246,9 @@ public class CPHInline
         }
     }
 
-    /// <summary>
-    /// Добавление даты подписки пользователя
-    /// Устанавливает дату подписки и добавляет монеты
-    /// </summary>
-    /// <returns>true если операция успешна, false при ошибке</returns>
+    // Добавление даты подписки пользователя
+    // Устанавливает дату подписки и добавляет монеты
+    // Возвращает: true если операция успешна, false при ошибке
     public bool AddFollowDate()
     {
         try
@@ -309,10 +285,8 @@ public class CPHInline
         }
     }
 
-    /// <summary>
-    /// Получение количества сообщений пользователя
-    /// </summary>
-    /// <returns>true если операция успешна, false при ошибке</returns>
+    // Получение количества сообщений пользователя
+    // Возвращает: true если операция успешна, false при ошибке
     public bool GetMessageCount()
     {
         try
@@ -328,10 +302,8 @@ public class CPHInline
         }
     }
 
-    /// <summary>
-    /// Получение времени просмотра пользователя
-    /// </summary>
-    /// <returns>true если операция успешна, false при ошибке</returns>
+    // Получение времени просмотра пользователя
+    // Возвращает: true если операция успешна, false при ошибке
     public bool GetWatchTime()
     {
         try
@@ -1043,19 +1015,15 @@ public class CPHInline
 // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ И УТИЛИТЫ
 // ============================================================================
 
-/// <summary>
-/// Вспомогательные методы для работы с системой рангов
-/// </summary>
+// Вспомогательные методы для работы с системой рангов
 public static class RankSystemHelpers
 {
-    /// <summary>
-    /// Создание объекта пользователя из аргументов
-    /// </summary>
-    /// <param name="cph">Экземпляр CPHInline</param>
-    /// <param name="service">Сервис (twitch, trovo, etc.)</param>
-    /// <param name="userName">Имя пользователя (опционально)</param>
-    /// <param name="serviceUserId">ID пользователя в сервисе (опционально)</param>
-    /// <returns>Объект UserData</returns>
+    // Создание объекта пользователя из аргументов
+    // cph: Экземпляр CPHInline
+    // service: Сервис (twitch, trovo, etc.)
+    // userName: Имя пользователя (опционально)
+    // serviceUserId: ID пользователя в сервисе (опционально)
+    // Возвращает: Объект UserData
     public static UserData CreateUserFromArgs(CPHInline cph, string service, string userName = null, string serviceUserId = null)
     {
         if (string.IsNullOrEmpty(serviceUserId))
@@ -1112,13 +1080,11 @@ public static class RankSystemHelpers
         };
     }
 
-    /// <summary>
-    /// Отправка ответа пользователю через соответствующий сервис
-    /// </summary>
-    /// <param name="cph">Экземпляр CPHInline</param>
-    /// <param name="service">Сервис для отправки</param>
-    /// <param name="reply">Текст ответа</param>
-    /// <returns>true если отправка успешна</returns>
+    // Отправка ответа пользователю через соответствующий сервис
+    // cph: Экземпляр CPHInline
+    // service: Сервис для отправки
+    // reply: Текст ответа
+    // Возвращает: true если отправка успешна
     public static bool SendReplyToService(CPHInline cph, string service, string reply)
     {
         if (string.IsNullOrEmpty(reply))
@@ -1146,11 +1112,9 @@ public static class RankSystemHelpers
         }
     }
 
-    /// <summary>
-    /// Валидация данных пользователя
-    /// </summary>
-    /// <param name="user">Объект пользователя для валидации</param>
-    /// <returns>true если данные валидны</returns>
+    // Валидация данных пользователя
+    // user: Объект пользователя для валидации
+    // Возвращает: true если данные валидны
     public static bool ValidateUserData(UserData user)
     {
         if (user == null)
@@ -1181,16 +1145,12 @@ public static class RankSystemHelpers
 // ВНУТРЕННЯЯ ЛОГИКА СИСТЕМЫ РАНГОВ
 // ============================================================================
 
-/// <summary>
-/// Внутренние методы для работы с системой рангов
-/// </summary>
+// Внутренние методы для работы с системой рангов
 public static class RankSystemInternal
 {
-    /// <summary>
-    /// Получение количества монет пользователя
-    /// </summary>
-    /// <param name="cph">Экземпляр CPHInline</param>
-    /// <returns>Количество монет</returns>
+    // Получение количества монет пользователя
+    // cph: Экземпляр CPHInline
+    // Возвращает: Количество монет
     public static long GetCoins(CPHInline cph)
     {
         string service = NormalizeService(cph);
@@ -1206,11 +1166,9 @@ public static class RankSystemInternal
         return userData?.Coins ?? 0;
     }
 
-    /// <summary>
-    /// Получение времени просмотра пользователя
-    /// </summary>
-    /// <param name="cph">Экземпляр CPHInline</param>
-    /// <returns>Время просмотра в секундах</returns>
+    // Получение времени просмотра пользователя
+    // cph: Экземпляр CPHInline
+    // Возвращает: Время просмотра в секундах
     public static long GetWatchTime(CPHInline cph)
     {
         string service = NormalizeService(cph);
@@ -1226,11 +1184,9 @@ public static class RankSystemInternal
         return userData?.WatchTime ?? 0;
     }
 
-    /// <summary>
-    /// Получение даты подписки пользователя
-    /// </summary>
-    /// <param name="cph">Экземпляр CPHInline</param>
-    /// <returns>Дата подписки или DateTime.MinValue если не подписан</returns>
+    // Получение даты подписки пользователя
+    // cph: Экземпляр CPHInline
+    // Возвращает: Дата подписки или DateTime.MinValue если не подписан
     public static DateTime GetFollowDate(CPHInline cph)
     {
         string service = NormalizeService(cph);
@@ -1246,11 +1202,9 @@ public static class RankSystemInternal
         return userData?.FollowDate ?? DateTime.MinValue;
     }
 
-    /// <summary>
-    /// Получение количества сообщений пользователя
-    /// </summary>
-    /// <param name="cph">Экземпляр CPHInline</param>
-    /// <returns>Количество сообщений</returns>
+    // Получение количества сообщений пользователя
+    // cph: Экземпляр CPHInline
+    // Возвращает: Количество сообщений
     public static long GetMessageCount(CPHInline cph)
     {
         string service = NormalizeService(cph);
@@ -1266,11 +1220,9 @@ public static class RankSystemInternal
         return userData?.MessageCount ?? 0;
     }
 
-    /// <summary>
-    /// Получение игры при подписке пользователя
-    /// </summary>
-    /// <param name="cph">Экземпляр CPHInline</param>
-    /// <returns>Название игры или пустая строка</returns>
+    // Получение игры при подписке пользователя
+    // cph: Экземпляр CPHInline
+    // Возвращает: Название игры или пустая строка
     public static string GetGameWhenFollow(CPHInline cph)
     {
         string service = NormalizeService(cph);
@@ -1286,11 +1238,9 @@ public static class RankSystemInternal
         return userData?.GameWhenFollow ?? string.Empty;
     }
 
-    /// <summary>
-    /// Нормализация названия сервиса
-    /// </summary>
-    /// <param name="cph">Экземпляр CPHInline</param>
-    /// <returns>Нормализованное название сервиса</returns>
+    // Нормализация названия сервиса
+    // cph: Экземпляр CPHInline
+    // Возвращает: Нормализованное название сервиса
     public static string NormalizeService(CPHInline cph)
     {
         if (!cph.CPH.TryGetArg("eventSource", out string service))
@@ -1310,12 +1260,10 @@ public static class RankSystemInternal
         return service.Equals("vkplay", StringComparison.OrdinalIgnoreCase) ? "vkvideolive" : service.ToLower();
     }
 
-    /// <summary>
-    /// Форматирование значения пользователя для отображения
-    /// </summary>
-    /// <param name="user">Пользователь</param>
-    /// <param name="field">Поле для форматирования</param>
-    /// <returns>Отформатированная строка</returns>
+    // Форматирование значения пользователя для отображения
+    // user: Пользователь
+    // field: Поле для форматирования
+    // Возвращает: Отформатированная строка
     public static string FormatValue(UserData user, string field)
     {
         return field switch
@@ -1327,11 +1275,9 @@ public static class RankSystemInternal
         };
     }
 
-    /// <summary>
-    /// Форматирование времени в читаемый вид
-    /// </summary>
-    /// <param name="totalSeconds">Общее количество секунд</param>
-    /// <returns>Отформатированная строка времени</returns>
+    // Форматирование времени в читаемый вид
+    // totalSeconds: Общее количество секунд
+    // Возвращает: Отформатированная строка времени
     public static string FormatDateTime(long totalSeconds)
     {
         int years = 0;
@@ -1432,12 +1378,10 @@ public static class RankSystemInternal
 // РАБОТА С БАЗОЙ ДАННЫХ
 // ============================================================================
 
-/// <summary>
-/// Менеджер для работы с базой данных системы рангов
-/// </summary>
+// Менеджер для работы с базой данных системы рангов
 public static class DatabaseManager
 {
-    /// <summary>Путь к файлу базы данных</summary>
+    // Путь к файлу базы данных
     private static readonly string DbPath = RankSystemConfig.DB_PATH;
     private static readonly ReaderWriterLockSlim _lock = new ReaderWriterLockSlim();
     private static readonly ReaderWriterLockSlim _historyLock = new ReaderWriterLockSlim();
@@ -2329,9 +2273,7 @@ public static class DatabaseManager
 // UI КОМПОНЕНТЫ
 // ============================================================================
 
-/// <summary>
-/// Форма для редактирования базы данных системы рангов
-/// </summary>
+// Форма для редактирования базы данных системы рангов
 public class RankSystemForm : Form
 {
     private DataGridView usersGrid = new DataGridView();
