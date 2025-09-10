@@ -142,14 +142,14 @@ public class CPHInline
         try
         {
             string service = RankSystemInternal.NormalizeService(this);
-            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
+            var user = RankSystemInternal.CreateUserFromArgs(this, service);
             if (string.IsNullOrEmpty(user.Service) || string.IsNullOrEmpty(user.ServiceUserId))
             {
                 CPH.LogError($"[RankSystem][AddMessageCount] Critical user data missing. Service: {user.Service}, ServiceUserId: {user.ServiceUserId}");
                 return false;
             }
 
-            var existingUser = RankSystemHelpers.GetExistingUser(user.Service, user.ServiceUserId);
+            var existingUser = RankSystemInternal.GetExistingUser(user.Service, user.ServiceUserId);
             if (existingUser is not null)
             {
                 // Сохраняем актуальное имя пользователя из аргументов
@@ -211,8 +211,8 @@ public class CPHInline
             {
                 string userName = viewer["userName"].ToString().ToLower();
                 string userId = viewer["id"].ToString();
-                var user = RankSystemHelpers.CreateUserFromArgs(this, service, userName, userId);
-                var existingUser = RankSystemHelpers.GetExistingUser(user.Service, user.ServiceUserId);
+                var user = RankSystemInternal.CreateUserFromArgs(this, service, userName, userId);
+                var existingUser = RankSystemInternal.GetExistingUser(user.Service, user.ServiceUserId);
                 if (existingUser is not null)
                 {
                     // Сохраняем актуальное имя пользователя из аргументов
@@ -252,8 +252,8 @@ public class CPHInline
         try
         {
             string service = RankSystemInternal.NormalizeService(this);
-            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
-            var existingUser = RankSystemHelpers.GetExistingUser(user.Service, user.ServiceUserId);
+            var user = RankSystemInternal.CreateUserFromArgs(this, service);
+            var existingUser = RankSystemInternal.GetExistingUser(user.Service, user.ServiceUserId);
             if (existingUser is not null)
             {
                 // Сохраняем актуальное имя пользователя из аргументов
@@ -352,8 +352,8 @@ public class CPHInline
         try
         {
             string service = RankSystemInternal.NormalizeService(this);
-            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
-            var existingUser = RankSystemHelpers.GetExistingUser(user.Service, user.ServiceUserId);
+            var user = RankSystemInternal.CreateUserFromArgs(this, service);
+            var existingUser = RankSystemInternal.GetExistingUser(user.Service, user.ServiceUserId);
             if (existingUser is not null)
             {
                 // Сохраняем актуальное имя пользователя из аргументов
@@ -423,7 +423,7 @@ public class CPHInline
                     // Обновляем дневную статистику для потраченных монет
                     string today = DateTime.Now.ToString("yyyy-MM-dd");
                     string service = RankSystemInternal.NormalizeService(this);
-                    var user = RankSystemHelpers.CreateUserFromArgs(this, service);
+                    var user = RankSystemInternal.CreateUserFromArgs(this, service);
                     DatabaseManager.AddToDailyStatsInternal(user.Service, user.ServiceUserId, today, user.UserName, spentCoins: actionCurrency);
 
                     return true;
@@ -526,7 +526,7 @@ public class CPHInline
                     continue;
 
                 // Получаем существующие данные пользователя
-                var existingUser = RankSystemHelpers.GetExistingUser(
+                var existingUser = RankSystemInternal.GetExistingUser(
                     data.Service == "Unknown" ? "vkvideolive" : data.Service.ToLower(),
                     data.UserID
                 );
@@ -570,7 +570,7 @@ public class CPHInline
         try
         {
             string service = RankSystemInternal.NormalizeService(this);
-            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
+            var user = RankSystemInternal.CreateUserFromArgs(this, service);
 
             string date = DateTime.Now.ToString("yyyy-MM-dd");
 
@@ -607,7 +607,7 @@ public class CPHInline
         try
         {
             string service = RankSystemInternal.NormalizeService(this);
-            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
+            var user = RankSystemInternal.CreateUserFromArgs(this, service);
 
             var endDate = DateTime.Now;
             var startDate = endDate.AddDays(-6); // 7 дней включая сегодня
@@ -648,7 +648,7 @@ public class CPHInline
         try
         {
             string service = RankSystemInternal.NormalizeService(this);
-            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
+            var user = RankSystemInternal.CreateUserFromArgs(this, service);
 
             var currentDate = DateTime.Now;
 
@@ -698,7 +698,7 @@ public class CPHInline
         try
         {
             string service = RankSystemInternal.NormalizeService(this);
-            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
+            var user = RankSystemInternal.CreateUserFromArgs(this, service);
 
             var endDate = DateTime.Now;
             var startDate = new DateTime(endDate.Year, endDate.Month, 1); // Первый день текущего месяца
@@ -739,7 +739,7 @@ public class CPHInline
         try
         {
             string service = RankSystemInternal.NormalizeService(this);
-            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
+            var user = RankSystemInternal.CreateUserFromArgs(this, service);
 
             var endDate = DateTime.Now;
             var startDate = endDate.AddDays(-29); // 30 дней включая сегодня
@@ -780,7 +780,7 @@ public class CPHInline
         try
         {
             string service = RankSystemInternal.NormalizeService(this);
-            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
+            var user = RankSystemInternal.CreateUserFromArgs(this, service);
 
             var endDate = DateTime.Now;
             var startDate = new DateTime(endDate.Year, 1, 1); // Первый день текущего года
@@ -821,7 +821,7 @@ public class CPHInline
         try
         {
             string service = RankSystemInternal.NormalizeService(this);
-            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
+            var user = RankSystemInternal.CreateUserFromArgs(this, service);
 
             var endDate = DateTime.Now;
             var startDate = endDate.AddDays(-364); // 365 дней включая сегодня
@@ -871,7 +871,7 @@ public class CPHInline
             }
 
             // Получаем данные текущего пользователя из команды
-            var user = RankSystemHelpers.CreateUserFromArgs(this, service);
+            var user = RankSystemInternal.CreateUserFromArgs(this, service);
             if (string.IsNullOrEmpty(user.UserName))
             {
                 CPH.LogError($"[RankSystem] Не удалось получить имя пользователя из команды");
@@ -897,7 +897,7 @@ public class CPHInline
                             var timeQty = Convert.ToInt64(reader["TimeQty"] ?? 0);
 
                             // Получаем существующего пользователя из нашей базы
-                            var existingUser = RankSystemHelpers.GetExistingUser(user.Service, user.ServiceUserId);
+                            var existingUser = RankSystemInternal.GetExistingUser(user.Service, user.ServiceUserId);
 
                             if (existingUser != null)
                             {
@@ -948,7 +948,13 @@ public class CPHInline
 // ============================================================================
 
 // Вспомогательные методы для работы с системой рангов
-public static class RankSystemHelpers
+
+// ============================================================================
+// ВНУТРЕННЯЯ ЛОГИКА СИСТЕМЫ РАНГОВ
+// ============================================================================
+
+// Внутренние методы для работы с системой рангов
+public static class RankSystemInternal
 {
     // Получение существующего пользователя из базы данных
     // service: Сервис пользователя
@@ -1086,22 +1092,13 @@ public static class RankSystemHelpers
 
         return true;
     }
-}
-
-// ============================================================================
-// ВНУТРЕННЯЯ ЛОГИКА СИСТЕМЫ РАНГОВ
-// ============================================================================
-
-// Внутренние методы для работы с системой рангов
-public static class RankSystemInternal
-{
     // Получение количества монет пользователя
     // cph: Экземпляр CPHInline
     // Возвращает: Количество монет
     public static long GetCoins(CPHInline cph)
     {
         string service = NormalizeService(cph);
-        var user = RankSystemHelpers.CreateUserFromArgs(cph, service);
+        var user = CreateUserFromArgs(cph, service);
         var userData = DatabaseManager.GetUserData(
             filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
             parameters: new[] {
@@ -1119,7 +1116,7 @@ public static class RankSystemInternal
     public static long GetWatchTime(CPHInline cph)
     {
         string service = NormalizeService(cph);
-        var user = RankSystemHelpers.CreateUserFromArgs(cph, service);
+        var user = CreateUserFromArgs(cph, service);
         var userData = DatabaseManager.GetUserData(
             filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
             parameters: new[] {
@@ -1137,7 +1134,7 @@ public static class RankSystemInternal
     public static DateTime GetFollowDate(CPHInline cph)
     {
         string service = NormalizeService(cph);
-        var user = RankSystemHelpers.CreateUserFromArgs(cph, service);
+        var user = CreateUserFromArgs(cph, service);
         var userData = DatabaseManager.GetUserData(
             filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
             parameters: new[] {
@@ -1155,7 +1152,7 @@ public static class RankSystemInternal
     public static long GetMessageCount(CPHInline cph)
     {
         string service = NormalizeService(cph);
-        var user = RankSystemHelpers.CreateUserFromArgs(cph, service);
+        var user = CreateUserFromArgs(cph, service);
         var userData = DatabaseManager.GetUserData(
             filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
             parameters: new[] {
@@ -1173,7 +1170,7 @@ public static class RankSystemInternal
     public static string GetGameWhenFollow(CPHInline cph)
     {
         string service = NormalizeService(cph);
-        var user = RankSystemHelpers.CreateUserFromArgs(cph, service);
+        var user = CreateUserFromArgs(cph, service);
         var userData = DatabaseManager.GetUserData(
             filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
             parameters: new[] {
