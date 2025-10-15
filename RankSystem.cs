@@ -349,12 +349,12 @@ public class CPHInline
             if (targetUser.Equals(""))
             {
                 DateTime followDate = RankSystemInternal.GetFollowDate(this);
-                CPH.SetArgument("followDate", followDate == DateTime.MinValue ? "неизвестно когда" : followDate.ToString("o"));
+                CPH.SetArgument("followDate", followDate == DateTime.MinValue ? "неизвестно когда" : followDate.ToString("dd.MM.yyyy HH:mm"));
             }
             else
             {
                 DateTime followDate = RankSystemInternal.GetFollowDate(this, targetUser);
-                CPH.SetArgument("followDate", followDate == DateTime.MinValue ? "неизвестно когда" : followDate.ToString("o"));
+                CPH.SetArgument("followDate", followDate == DateTime.MinValue ? "неизвестно когда" : followDate.ToString("dd.MM.yyyy HH:mm"));
                 CPH.SetArgument("userName", targetUser);
             }
 
