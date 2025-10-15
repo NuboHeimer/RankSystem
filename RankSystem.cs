@@ -371,8 +371,19 @@ public class CPHInline
     {
         try
         {
-            string gameWhenFollow = RankSystemInternal.GetGameWhenFollow(this);
-            CPH.SetArgument("gameWhenFollow", string.IsNullOrEmpty(gameWhenFollow) ? "игры нет" : gameWhenFollow);
+            string targetUser = args["rawInput"].ToString().ToLower();
+            if (targetUser.Equals(""))
+            {
+                string gameWhenFollow = RankSystemInternal.GetGameWhenFollow(this);
+                CPH.SetArgument("gameWhenFollow", string.IsNullOrEmpty(gameWhenFollow) ? "игры нет" : gameWhenFollow);
+            }
+            else
+            {
+                string gameWhenFollow = RankSystemInternal.GetGameWhenFollow(this, targetUser);
+                CPH.SetArgument("gameWhenFollow", string.IsNullOrEmpty(gameWhenFollow) ? "игры нет" : gameWhenFollow);
+                CPH.SetArgument("userName", targetUser);
+            }
+
             return true;
         }
         catch (Exception ex)
@@ -1151,32 +1162,7 @@ public static class RankSystemInternal
     // Возвращает: Время просмотра в секундах
     public static long GetWatchTime(CPHInline cph, string targetUser = null)
     {
-        string service = NormalizeService(cph);
-
-        // Определяем параметры запроса в зависимости от входных данных
-        string filter;
-        SQLiteParameter[] parameters;
-
-        if (string.IsNullOrEmpty(targetUser))
-        {
-            var user = CreateUserFromArgs(cph, service);
-            filter = "Service = @Service AND ServiceUserId = @ServiceUserId";
-            parameters = new[] {
-                new SQLiteParameter("@Service", user.Service),
-                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-            };
-        }
-        else
-        {
-            var userName = targetUser.TrimStart('@');
-            filter = "Service = @Service AND UserName = @UserName";
-            parameters = new[] {
-                new SQLiteParameter("@Service", service),
-                new SQLiteParameter("@UserName", userName)
-            };
-        }
-
-        var userData = DatabaseManager.GetUserData(filter, parameters).FirstOrDefault();
+        var userData = GetUserDataFromDatabase(cph, targetUser);
         return userData?.WatchTime ?? 0;
     }
 
@@ -1186,39 +1172,35 @@ public static class RankSystemInternal
     // Возвращает: Дата подписки или DateTime.MinValue если не подписан
     public static DateTime GetFollowDate(CPHInline cph, string targetUser = null)
     {
-        string service = NormalizeService(cph);
-
-        // Определяем параметры запроса в зависимости от входных данных
-        string filter;
-        SQLiteParameter[] parameters;
-
-        if (string.IsNullOrEmpty(targetUser))
-        {
-            var user = CreateUserFromArgs(cph, service);
-            filter = "Service = @Service AND ServiceUserId = @ServiceUserId";
-            parameters = new[] {
-                new SQLiteParameter("@Service", user.Service),
-                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-            };
-        }
-        else
-        {
-            var userName = targetUser.TrimStart('@');
-            filter = "Service = @Service AND UserName = @UserName";
-            parameters = new[] {
-                new SQLiteParameter("@Service", service),
-                new SQLiteParameter("@UserName", userName)
-            };
-        }
-
-        var userData = DatabaseManager.GetUserData(filter, parameters).FirstOrDefault();
+        var userData = GetUserDataFromDatabase(cph, targetUser);
         return userData?.FollowDate ?? DateTime.MinValue;
     }
 
     // Получение количества сообщений пользователя
     // cph: Экземпляр CPHInline
+    // targetUser: Имя пользователя для получения количества сообщений (опционально)
     // Возвращает: Количество сообщений
     public static long GetMessageCount(CPHInline cph, string targetUser = null)
+    {
+        var userData = GetUserDataFromDatabase(cph, targetUser);
+        return userData?.MessageCount ?? 0;
+    }
+
+    // Получение игры при подписке пользователя
+    // cph: Экземпляр CPHInline
+    // targetUser: Имя пользователя для получения игры при подписке (опционально)
+    // Возвращает: Название игры или пустая строка
+    public static string GetGameWhenFollow(CPHInline cph, string targetUser = null)
+    {
+        var userData = GetUserDataFromDatabase(cph, targetUser);
+        return userData?.GameWhenFollow ?? string.Empty;
+    }
+
+    // Получение данных пользователя из базы данных
+    // cph: Экземпляр CPHInline
+    // targetUser: Имя пользователя для поиска (опционально)
+    // Возвращает: Данные пользователя или null если не найден
+    private static UserData GetUserDataFromDatabase(CPHInline cph, string targetUser = null)
     {
         string service = NormalizeService(cph);
 
@@ -1245,26 +1227,7 @@ public static class RankSystemInternal
             };
         }
 
-        var userData = DatabaseManager.GetUserData(filter, parameters).FirstOrDefault();
-        return userData?.MessageCount ?? 0;
-    }
-
-    // Получение игры при подписке пользователя
-    // cph: Экземпляр CPHInline
-    // Возвращает: Название игры или пустая строка
-    public static string GetGameWhenFollow(CPHInline cph)
-    {
-        string service = NormalizeService(cph);
-        var user = CreateUserFromArgs(cph, service);
-        var userData = DatabaseManager.GetUserData(
-            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-            parameters: new[] {
-                new SQLiteParameter("@Service", user.Service),
-                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-            }
-        ).FirstOrDefault();
-
-        return userData?.GameWhenFollow ?? string.Empty;
+        return DatabaseManager.GetUserData(filter, parameters).FirstOrDefault();
     }
 
     // Нормализация названия сервиса
