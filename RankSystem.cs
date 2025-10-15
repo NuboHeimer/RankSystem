@@ -345,8 +345,19 @@ public class CPHInline
     {
         try
         {
-            DateTime followDate = RankSystemInternal.GetFollowDate(this);
-            CPH.SetArgument("followDate", followDate == DateTime.MinValue ? "неизвестно когда" : followDate.ToString("o"));
+            string targetUser = args["rawInput"].ToString().ToLower();
+            if (targetUser.Equals(""))
+            {
+                DateTime followDate = RankSystemInternal.GetFollowDate(this);
+                CPH.SetArgument("followDate", followDate == DateTime.MinValue ? "неизвестно когда" : followDate.ToString("o"));
+            }
+            else
+            {
+                DateTime followDate = RankSystemInternal.GetFollowDate(this, targetUser);
+                CPH.SetArgument("followDate", followDate == DateTime.MinValue ? "неизвестно когда" : followDate.ToString("o"));
+                CPH.SetArgument("userName", targetUser);
+            }
+
             return true;
         }
         catch (Exception ex)
@@ -1171,19 +1182,36 @@ public static class RankSystemInternal
 
     // Получение даты подписки пользователя
     // cph: Экземпляр CPHInline
+    // targetUser: Имя пользователя для получения даты подписки (опционально)
     // Возвращает: Дата подписки или DateTime.MinValue если не подписан
-    public static DateTime GetFollowDate(CPHInline cph)
+    public static DateTime GetFollowDate(CPHInline cph, string targetUser = null)
     {
         string service = NormalizeService(cph);
-        var user = CreateUserFromArgs(cph, service);
-        var userData = DatabaseManager.GetUserData(
-            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-            parameters: new[] {
+
+        // Определяем параметры запроса в зависимости от входных данных
+        string filter;
+        SQLiteParameter[] parameters;
+
+        if (string.IsNullOrEmpty(targetUser))
+        {
+            var user = CreateUserFromArgs(cph, service);
+            filter = "Service = @Service AND ServiceUserId = @ServiceUserId";
+            parameters = new[] {
                 new SQLiteParameter("@Service", user.Service),
                 new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-            }
-        ).FirstOrDefault();
+            };
+        }
+        else
+        {
+            var userName = targetUser.TrimStart('@');
+            filter = "Service = @Service AND UserName = @UserName";
+            parameters = new[] {
+                new SQLiteParameter("@Service", service),
+                new SQLiteParameter("@UserName", userName)
+            };
+        }
 
+        var userData = DatabaseManager.GetUserData(filter, parameters).FirstOrDefault();
         return userData?.FollowDate ?? DateTime.MinValue;
     }
 
