@@ -433,8 +433,19 @@ public class CPHInline
     {
         try
         {
-            long coins = RankSystemInternal.GetCoins(this);
-            CPH.SetArgument("coins", coins);
+            string targetUser = args["rawInput"].ToString().ToLower();
+            if (targetUser.Equals(""))
+            {
+                long coins = RankSystemInternal.GetCoins(this);
+                CPH.SetArgument("coins", coins);
+            }
+            else
+            {
+                long coins = RankSystemInternal.GetCoins(this, targetUser);
+                CPH.SetArgument("coins", coins);
+                CPH.SetArgument("userName", targetUser);
+            }
+
             return true;
         }
         catch (Exception ex)
@@ -1140,19 +1151,11 @@ public static class RankSystemInternal
     }
     // Получение количества монет пользователя
     // cph: Экземпляр CPHInline
+    // targetUser: Имя пользователя для получения количества монет (опционально)
     // Возвращает: Количество монет
-    public static long GetCoins(CPHInline cph)
+    public static long GetCoins(CPHInline cph, string targetUser = null)
     {
-        string service = NormalizeService(cph);
-        var user = CreateUserFromArgs(cph, service);
-        var userData = DatabaseManager.GetUserData(
-            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-            parameters: new[] {
-                new SQLiteParameter("@Service", user.Service),
-                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-            }
-        ).FirstOrDefault();
-
+        var userData = GetUserDataFromDatabase(cph, targetUser);
         return userData?.Coins ?? 0;
     }
 
