@@ -291,16 +291,19 @@ public class CPHInline
         try
         {
             string targetUser = args["rawInput"].ToString().ToLower();
-            if (targetUser.Equals("")) {
+            if (targetUser.Equals(""))
+            {
                 long messageCount = RankSystemInternal.GetMessageCount(this);
                 CPH.SetArgument("messageCount", messageCount);
-                } else {
-                    long messageCount = RankSystemInternal.GetMessageCount(this, targetUser);
-                    CPH.SetArgument("messageCount", messageCount);
-                    CPH.SetArgument("userName", targetUser);
+            }
+            else
+            {
+                long messageCount = RankSystemInternal.GetMessageCount(this, targetUser);
+                CPH.SetArgument("messageCount", messageCount);
+                CPH.SetArgument("userName", targetUser);
 
-                }
-            
+            }
+
             return true;
         }
         catch (Exception ex)
@@ -316,8 +319,19 @@ public class CPHInline
     {
         try
         {
-            long watchTime = RankSystemInternal.GetWatchTime(this);
-            CPH.SetArgument("watchTime", watchTime == 0 ? 0 : RankSystemInternal.FormatDateTime(watchTime));
+            string targetUser = args["rawInput"].ToString().ToLower();
+            if (targetUser.Equals(""))
+            {
+                long watchTime = RankSystemInternal.GetWatchTime(this);
+                CPH.SetArgument("watchTime", watchTime == 0 ? 0 : RankSystemInternal.FormatDateTime(watchTime));
+            }
+            else
+            {
+                long watchTime = RankSystemInternal.GetWatchTime(this, targetUser);
+                CPH.SetArgument("watchTime", watchTime == 0 ? 0 : RankSystemInternal.FormatDateTime(watchTime));
+                CPH.SetArgument("userName", targetUser);
+            }
+
             return true;
         }
         catch (Exception ex)
@@ -1122,19 +1136,36 @@ public static class RankSystemInternal
 
     // Получение времени просмотра пользователя
     // cph: Экземпляр CPHInline
+    // targetUser: Имя пользователя для получения времени просмотра (опционально)
     // Возвращает: Время просмотра в секундах
-    public static long GetWatchTime(CPHInline cph)
+    public static long GetWatchTime(CPHInline cph, string targetUser = null)
     {
         string service = NormalizeService(cph);
-        var user = CreateUserFromArgs(cph, service);
-        var userData = DatabaseManager.GetUserData(
-            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-            parameters: new[] {
+
+        // Определяем параметры запроса в зависимости от входных данных
+        string filter;
+        SQLiteParameter[] parameters;
+
+        if (string.IsNullOrEmpty(targetUser))
+        {
+            var user = CreateUserFromArgs(cph, service);
+            filter = "Service = @Service AND ServiceUserId = @ServiceUserId";
+            parameters = new[] {
                 new SQLiteParameter("@Service", user.Service),
                 new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-            }
-        ).FirstOrDefault();
+            };
+        }
+        else
+        {
+            var userName = targetUser.TrimStart('@');
+            filter = "Service = @Service AND UserName = @UserName";
+            parameters = new[] {
+                new SQLiteParameter("@Service", service),
+                new SQLiteParameter("@UserName", userName)
+            };
+        }
 
+        var userData = DatabaseManager.GetUserData(filter, parameters).FirstOrDefault();
         return userData?.WatchTime ?? 0;
     }
 
@@ -1162,11 +1193,11 @@ public static class RankSystemInternal
     public static long GetMessageCount(CPHInline cph, string targetUser = null)
     {
         string service = NormalizeService(cph);
-        
+
         // Определяем параметры запроса в зависимости от входных данных
         string filter;
         SQLiteParameter[] parameters;
-        
+
         if (string.IsNullOrEmpty(targetUser))
         {
             var user = CreateUserFromArgs(cph, service);
@@ -1185,7 +1216,7 @@ public static class RankSystemInternal
                 new SQLiteParameter("@UserName", userName)
             };
         }
-        
+
         var userData = DatabaseManager.GetUserData(filter, parameters).FirstOrDefault();
         return userData?.MessageCount ?? 0;
     }
