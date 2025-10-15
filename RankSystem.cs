@@ -290,8 +290,17 @@ public class CPHInline
     {
         try
         {
-            long messageCount = RankSystemInternal.GetMessageCount(this);
-            CPH.SetArgument("messageCount", messageCount);
+            string targetUser = args["rawInput"].ToString().ToLower();
+            if (targetUser.Equals("")) {
+                long messageCount = RankSystemInternal.GetMessageCount(this);
+                CPH.SetArgument("messageCount", messageCount);
+                } else {
+                    long messageCount = RankSystemInternal.GetMessageCount(this, targetUser);
+                    CPH.SetArgument("messageCount", messageCount);
+                    CPH.SetArgument("userName", targetUser);
+
+                }
+            
             return true;
         }
         catch (Exception ex)
@@ -1150,18 +1159,34 @@ public static class RankSystemInternal
     // Получение количества сообщений пользователя
     // cph: Экземпляр CPHInline
     // Возвращает: Количество сообщений
-    public static long GetMessageCount(CPHInline cph)
+    public static long GetMessageCount(CPHInline cph, string targetUser = null)
     {
         string service = NormalizeService(cph);
-        var user = CreateUserFromArgs(cph, service);
-        var userData = DatabaseManager.GetUserData(
-            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
-            parameters: new[] {
+        
+        // Определяем параметры запроса в зависимости от входных данных
+        string filter;
+        SQLiteParameter[] parameters;
+        
+        if (string.IsNullOrEmpty(targetUser))
+        {
+            var user = CreateUserFromArgs(cph, service);
+            filter = "Service = @Service AND ServiceUserId = @ServiceUserId";
+            parameters = new[] {
                 new SQLiteParameter("@Service", user.Service),
                 new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
-            }
-        ).FirstOrDefault();
-
+            };
+        }
+        else
+        {
+            var userName = targetUser.TrimStart('@');
+            filter = "Service = @Service AND UserName = @UserName";
+            parameters = new[] {
+                new SQLiteParameter("@Service", service),
+                new SQLiteParameter("@UserName", userName)
+            };
+        }
+        
+        var userData = DatabaseManager.GetUserData(filter, parameters).FirstOrDefault();
         return userData?.MessageCount ?? 0;
     }
 
