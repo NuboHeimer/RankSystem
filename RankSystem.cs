@@ -105,7 +105,6 @@ public class DailyStats
     public string Date { get; set; } // YYYY-MM-DD формат
     public string ServiceUserId { get; set; }
     public string Service { get; set; }
-    public string Username { get; set; }
     public long WatchTime { get; set; }
     public long MessageCount { get; set; }
     public long Coins { get; set; }
@@ -175,7 +174,7 @@ public class CPHInline
 
             // Обновляем дневную статистику
             string today = DateTime.Now.ToString("yyyy-MM-dd");
-            DatabaseManager.AddToDailyStatsInternal(user.Service, user.ServiceUserId, today, user.UserName, messageCount: 1, coins: coinsToAdd);
+            DatabaseManager.AddToDailyStatsInternal(user.Service, user.ServiceUserId, today, messageCount: 1, coins: coinsToAdd);
             return true;
         }
         catch (Exception ex)
@@ -233,7 +232,7 @@ public class CPHInline
 
                 // Обновляем дневную статистику
                 string today = DateTime.Now.ToString("yyyy-MM-dd");
-                DatabaseManager.AddToDailyStatsInternal(user.Service, user.ServiceUserId, today, user.UserName, watchTime: timeToAdd, coins: coinsToAdd);
+                DatabaseManager.AddToDailyStatsInternal(user.Service, user.ServiceUserId, today, watchTime: timeToAdd, coins: coinsToAdd);
             }
 
             return true;
@@ -419,7 +418,7 @@ public class CPHInline
 
             // Обновляем дневную статистику
             string today = DateTime.Now.ToString("yyyy-MM-dd");
-            DatabaseManager.AddToDailyStatsInternal(user.Service, user.ServiceUserId, today, user.UserName, coins: coinsFromArgs);
+            DatabaseManager.AddToDailyStatsInternal(user.Service, user.ServiceUserId, today, coins: coinsFromArgs);
             return true;
         }
         catch (Exception ex)
@@ -481,7 +480,7 @@ public class CPHInline
                     string today = DateTime.Now.ToString("yyyy-MM-dd");
                     string service = RankSystemInternal.NormalizeService(this);
                     var user = RankSystemInternal.CreateUserFromArgs(this, service);
-                    DatabaseManager.AddToDailyStatsInternal(user.Service, user.ServiceUserId, today, user.UserName, spentCoins: actionCurrency);
+                    DatabaseManager.AddToDailyStatsInternal(user.Service, user.ServiceUserId, today, spentCoins: actionCurrency);
 
                     return true;
                 }
@@ -1438,7 +1437,6 @@ public static class DatabaseManager
                         Date TEXT NOT NULL,
                         ServiceUserId TEXT NOT NULL,
                         Service TEXT NOT NULL,
-                        Username TEXT NOT NULL,
                         WatchTime INTEGER DEFAULT 0,
                         MessageCount INTEGER DEFAULT 0,
                         Coins INTEGER DEFAULT 0,
@@ -1528,7 +1526,6 @@ public static class DatabaseManager
                         { "Date", "TEXT NOT NULL" },
                         { "ServiceUserId", "TEXT NOT NULL" },
                         { "Service", "TEXT NOT NULL" },
-                        { "Username", "TEXT" },
                         { "WatchTime", "INTEGER DEFAULT 0" },
                         { "MessageCount", "INTEGER DEFAULT 0" },
                         { "Coins", "INTEGER DEFAULT 0" },
@@ -1556,73 +1553,7 @@ public static class DatabaseManager
                         }
                     }
 
-                    // Если колонка Username была добавлена, заполняем существующие записи
-                    if (!existingColumns.Contains("Username"))
-                    {
-                        // Получаем все уникальные пользователи из таблицы Users
-                        cmd.CommandText = "SELECT DISTINCT Service, ServiceUserId, UserName FROM Users;";
-                        var userData = new List<(string Service, string ServiceUserId, string UserName)>();
-                        using (var reader = cmd.ExecuteReader())
-                        {
-                            while (reader.Read())
-                            {
-                                userData.Add((
-                                    reader["Service"].ToString(),
-                                    reader["ServiceUserId"].ToString(),
-                                    reader["UserName"].ToString()
-                                ));
-                            }
-                        }
-
-                        // Обновляем существующие записи в DailyStats
-                        foreach (var user in userData)
-                        {
-                            cmd.CommandText = "UPDATE DailyStats SET Username = @Username WHERE Service = @Service AND ServiceUserId = @ServiceUserId;";
-                            cmd.Parameters.Clear();
-                            cmd.Parameters.AddWithValue("@Username", user.UserName);
-                            cmd.Parameters.AddWithValue("@Service", user.Service);
-                            cmd.Parameters.AddWithValue("@ServiceUserId", user.ServiceUserId);
-                            cmd.ExecuteNonQuery();
-                        }
-
-                        // После заполнения данных добавляем ограничение NOT NULL
-                        // Для этого нужно пересоздать таблицу
-                        cmd.CommandText = @"
-                        CREATE TABLE DailyStats_new (
-                            Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            UUID TEXT,
-                            Date TEXT NOT NULL,
-                            ServiceUserId TEXT NOT NULL,
-                            Service TEXT NOT NULL,
-                            Username TEXT NOT NULL,
-                            WatchTime INTEGER DEFAULT 0,
-                            MessageCount INTEGER DEFAULT 0,
-                            Coins INTEGER DEFAULT 0,
-                            SpentCoins INTEGER DEFAULT 0,
-                            UNIQUE(Date, ServiceUserId, Service)
-                        );";
-                        cmd.ExecuteNonQuery();
-
-                        // Копируем данные в новую таблицу
-                        cmd.CommandText = @"
-                        INSERT INTO DailyStats_new (Id, UUID, Date, ServiceUserId, Service, Username, WatchTime, MessageCount, Coins, SpentCoins)
-                        SELECT Id, UUID, Date, ServiceUserId, Service, Username, WatchTime, MessageCount, Coins, SpentCoins FROM DailyStats;";
-                        cmd.ExecuteNonQuery();
-
-                        // Удаляем старую таблицу и переименовываем новую
-                        cmd.CommandText = "DROP TABLE DailyStats;";
-                        cmd.ExecuteNonQuery();
-                        cmd.CommandText = "ALTER TABLE DailyStats_new RENAME TO DailyStats;";
-                        cmd.ExecuteNonQuery();
-
-                        // Пересоздаем индексы
-                        cmd.CommandText = "CREATE INDEX IF NOT EXISTS idx_dailystats_date ON DailyStats(Date);";
-                        cmd.ExecuteNonQuery();
-                        cmd.CommandText = "CREATE INDEX IF NOT EXISTS idx_dailystats_user ON DailyStats(ServiceUserId, Service);";
-                        cmd.ExecuteNonQuery();
-                        cmd.CommandText = "CREATE INDEX IF NOT EXISTS idx_dailystats_date_user ON DailyStats(Date, ServiceUserId, Service);";
-                        cmd.ExecuteNonQuery();
-                    }
+                    // Блок заполнения Username и пересоздания таблицы более не требуется
                 }
             }
 
@@ -2145,7 +2076,6 @@ FROM DailyStats;";
                                 Date = reader["Date"].ToString(),
                                 ServiceUserId = reader["ServiceUserId"].ToString(),
                                 Service = reader["Service"].ToString(),
-                                Username = reader["Username"].ToString(),
                                 WatchTime = Convert.ToInt64(reader["WatchTime"]),
                                 MessageCount = Convert.ToInt64(reader["MessageCount"]),
                                 Coins = Convert.ToInt64(reader["Coins"]),
@@ -2221,7 +2151,7 @@ FROM DailyStats;";
 
     // Методы для точечного обновления дневной статистики
 
-    public static void AddToDailyStatsInternal(string service, string serviceUserId, string date, string username, long watchTime = 0, long messageCount = 0, long coins = 0, long spentCoins = 0)
+    public static void AddToDailyStatsInternal(string service, string serviceUserId, string date, long watchTime = 0, long messageCount = 0, long coins = 0, long spentCoins = 0)
     {
         _lock.EnterWriteLock();
         try
@@ -2252,7 +2182,7 @@ FROM DailyStats;";
                     // Если запись не найдена, создаем новую
                     if (rowsAffected == 0)
                     {
-                        CreateDailyStatsInternal(service, serviceUserId, date, username, watchTime, messageCount, coins, spentCoins);
+                        CreateDailyStatsInternal(service, serviceUserId, date, watchTime, messageCount, coins, spentCoins);
                     }
                 }
             }
@@ -2299,20 +2229,16 @@ FROM DailyStats;";
                 // Если запись не найдена, создаем новую с нулевыми значениями
                 if (rowsAffected == 0)
                 {
-                    // Получаем UUID и Username из таблицы Users
+                    // Получаем UUID из таблицы Users
                     string uuid = null;
-                    string username = null;
-                    cmd.CommandText = "SELECT UUID, UserName FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId";
+                    cmd.CommandText = "SELECT UUID FROM Users WHERE Service = @Service AND ServiceUserId = @ServiceUserId";
                     cmd.Parameters.Clear();
                     cmd.Parameters.AddWithValue("@Service", service);
                     cmd.Parameters.AddWithValue("@ServiceUserId", serviceUserId);
-                    using (var userReader = cmd.ExecuteReader())
+                    var uuidObj = cmd.ExecuteScalar();
+                    if (uuidObj != null && uuidObj != DBNull.Value)
                     {
-                        if (userReader.Read())
-                        {
-                            uuid = userReader["UUID"] != DBNull.Value ? userReader["UUID"].ToString() : null;
-                            username = userReader["UserName"].ToString();
-                        }
+                        uuid = uuidObj.ToString();
                     }
 
                     var dailyStats = new DailyStats
@@ -2321,7 +2247,6 @@ FROM DailyStats;";
                         Date = date,
                         ServiceUserId = serviceUserId,
                         Service = service,
-                        Username = username ?? string.Empty,
                         WatchTime = 0,
                         MessageCount = 0,
                         Coins = 0,
@@ -2350,12 +2275,12 @@ FROM DailyStats;";
             }
         }
     }
-    public static void CreateDailyStats(string service, string serviceUserId, string date, string username, long watchTime = 0, long messageCount = 0, long coins = 0, long spentCoins = 0)
+    public static void CreateDailyStats(string service, string serviceUserId, string date, long watchTime = 0, long messageCount = 0, long coins = 0, long spentCoins = 0)
     {
         _lock.EnterWriteLock();
         try
         {
-            CreateDailyStatsInternal(service, serviceUserId, date, username, watchTime, messageCount, coins, spentCoins);
+            CreateDailyStatsInternal(service, serviceUserId, date, watchTime, messageCount, coins, spentCoins);
         }
         finally
         {
@@ -2364,7 +2289,7 @@ FROM DailyStats;";
     }
 
     // Внутренний метод без блокировки для использования внутри уже заблокированных операций
-    public static void CreateDailyStatsInternal(string service, string serviceUserId, string date, string username, long watchTime = 0, long messageCount = 0, long coins = 0, long spentCoins = 0)
+    public static void CreateDailyStatsInternal(string service, string serviceUserId, string date, long watchTime = 0, long messageCount = 0, long coins = 0, long spentCoins = 0)
     {
         // Получаем UUID из таблицы Users
         string uuid = null;
@@ -2390,7 +2315,6 @@ FROM DailyStats;";
             Date = date,
             ServiceUserId = serviceUserId,
             Service = service,
-            Username = username,
             WatchTime = watchTime,
             MessageCount = messageCount,
             Coins = coins,
@@ -2421,14 +2345,13 @@ FROM DailyStats;";
             using (var cmd = new SQLiteCommand(connection))
             {
                 cmd.CommandText = @"
-                INSERT OR REPLACE INTO DailyStats (UUID, Date, ServiceUserId, Service, Username, WatchTime, MessageCount, Coins, SpentCoins)
-                VALUES (@UUID, @Date, @ServiceUserId, @Service, @Username, @WatchTime, @MessageCount, @Coins, @SpentCoins)";
+                INSERT OR REPLACE INTO DailyStats (UUID, Date, ServiceUserId, Service, WatchTime, MessageCount, Coins, SpentCoins)
+                VALUES (@UUID, @Date, @ServiceUserId, @Service, @WatchTime, @MessageCount, @Coins, @SpentCoins)";
 
                 cmd.Parameters.AddWithValue("@UUID", dailyStats.UUID ?? (object)DBNull.Value);
                 cmd.Parameters.AddWithValue("@Date", dailyStats.Date);
                 cmd.Parameters.AddWithValue("@ServiceUserId", dailyStats.ServiceUserId);
                 cmd.Parameters.AddWithValue("@Service", dailyStats.Service);
-                cmd.Parameters.AddWithValue("@Username", dailyStats.Username);
                 cmd.Parameters.AddWithValue("@WatchTime", dailyStats.WatchTime);
                 cmd.Parameters.AddWithValue("@MessageCount", dailyStats.MessageCount);
                 cmd.Parameters.AddWithValue("@Coins", dailyStats.Coins);
