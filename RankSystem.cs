@@ -289,7 +289,7 @@ public class CPHInline
     {
         try
         {
-            string targetUser = args["rawInput"].ToString().ToLower();
+            string targetUser = RankSystemInternal.NormalizeTargetUser(args["rawInput"].ToString());
             if (targetUser.Equals(""))
             {
                 long messageCount = RankSystemInternal.GetMessageCount(this);
@@ -318,7 +318,7 @@ public class CPHInline
     {
         try
         {
-            string targetUser = args["rawInput"].ToString().ToLower();
+            string targetUser = RankSystemInternal.NormalizeTargetUser(args["rawInput"].ToString());
             if (targetUser.Equals(""))
             {
                 long watchTime = RankSystemInternal.GetWatchTime(this);
@@ -344,7 +344,7 @@ public class CPHInline
     {
         try
         {
-            string targetUser = args["rawInput"].ToString().ToLower();
+            string targetUser = RankSystemInternal.NormalizeTargetUser(args["rawInput"].ToString());
             if (targetUser.Equals(""))
             {
                 DateTime followDate = RankSystemInternal.GetFollowDate(this);
@@ -370,7 +370,7 @@ public class CPHInline
     {
         try
         {
-            string targetUser = args["rawInput"].ToString().ToLower();
+            string targetUser = RankSystemInternal.NormalizeTargetUser(args["rawInput"].ToString());
             if (targetUser.Equals(""))
             {
                 string gameWhenFollow = RankSystemInternal.GetGameWhenFollow(this);
@@ -432,7 +432,7 @@ public class CPHInline
     {
         try
         {
-            string targetUser = args["rawInput"].ToString().ToLower();
+            string targetUser = RankSystemInternal.NormalizeTargetUser(args["rawInput"].ToString());
             if (targetUser.Equals(""))
             {
                 long coins = RankSystemInternal.GetCoins(this);
@@ -1012,6 +1012,16 @@ public class CPHInline
 // Внутренние методы для работы с системой рангов
 public static class RankSystemInternal
 {
+    // Нормализация имени пользователя из rawInput
+    public static string NormalizeTargetUser(string raw)
+    {
+        if (string.IsNullOrEmpty(raw))
+            return string.Empty;
+        string target = raw.ToLower().Trim();
+        if (target.EndsWith(","))
+            target = target.Substring(0, target.Length - 1).TrimEnd();
+        return target;
+    }
     // Получение существующего пользователя из базы данных
     // service: Сервис пользователя
     // serviceUserId: ID пользователя в сервисе
