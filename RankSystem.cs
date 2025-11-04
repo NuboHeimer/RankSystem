@@ -568,6 +568,9 @@ public class CPHInline
     {
         try
         {
+            // Обеспечиваем наличие инфраструктуры для фиксации миграций (создается только по вызову миграции)
+            DatabaseManager.EnsureMigrationInfrastructure("MiniChat");
+
             string jsonContent = File.ReadAllText("Live.json");
             var liveData = JsonConvert.DeserializeObject<List<LiveData>>(jsonContent);
 
@@ -587,6 +590,10 @@ public class CPHInline
                     data.UserID
                 );
 
+                // Если уже есть отметка миграции для этого пользователя, пропускаем
+                if (existingUser != null && DatabaseManager.HasMigrationMark(existingUser.UUID, "MiniChat"))
+                    continue;
+
                 // Если пользователь существует и у него есть дата фоллоу, пропускаем
                 if (existingUser != null && existingUser.FollowDate != DateTime.MinValue)
                     continue;
@@ -602,6 +609,13 @@ public class CPHInline
                 };
 
                 DatabaseManager.UpsertUser(user);
+
+                // Обновляем UUID после вставки (на случай нового пользователя)
+                var refreshed = RankSystemInternal.GetExistingUser(user.Service, user.ServiceUserId);
+                if (refreshed != null && !string.IsNullOrEmpty(refreshed.UUID))
+                {
+                    DatabaseManager.MarkMigration(refreshed.UUID, "MiniChat");
+                }
             }
 
             return true;
@@ -917,6 +931,8 @@ public class CPHInline
     {
         try
         {
+            // Обеспечиваем наличие инфраструктуры для фиксации миграций (создается только по вызову миграции)
+            DatabaseManager.EnsureMigrationInfrastructure("RutonyChat");
             string service = RankSystemInternal.NormalizeService(this);
             string ranksDbPath = "ranks.db";
 
@@ -955,12 +971,23 @@ public class CPHInline
                             // Получаем существующего пользователя из нашей базы
                             var existingUser = RankSystemInternal.GetExistingUser(user.Service, user.ServiceUserId);
 
+                            // Если уже есть отметка миграции для этого пользователя, пропускаем
+                            if (existingUser != null && DatabaseManager.HasMigrationMark(existingUser.UUID, "RutonyChat"))
+                            {
+                                CPH.LogInfo($"[RankSystem] Пропуск: уже мигрирован {user.UserName} из RutonyChat");
+                                return true;
+                            }
+
                             if (existingUser != null)
                             {
                                 // Обновляем существующего пользователя
                                 existingUser.Coins += creditsQty;
                                 existingUser.WatchTime += timeQty;
                                 DatabaseManager.UpsertUser(existingUser);
+                                // Отмечаем успешную миграцию
+                                var refreshed = RankSystemInternal.GetExistingUser(existingUser.Service, existingUser.ServiceUserId);
+                                if (refreshed != null && !string.IsNullOrEmpty(refreshed.UUID))
+                                    DatabaseManager.MarkMigration(refreshed.UUID, "RutonyChat");
                                 CPH.LogInfo($"[RankSystem] Обновлен пользователь {user.UserName}: +{creditsQty} монет, +{timeQty} времени просмотра");
                             }
                             else
@@ -972,6 +999,10 @@ public class CPHInline
                                 user.FollowDate = DateTime.MinValue;
                                 user.GameWhenFollow = "";
                                 DatabaseManager.UpsertUser(user);
+                                // Отмечаем успешную миграцию
+                                var refreshedNew = RankSystemInternal.GetExistingUser(user.Service, user.ServiceUserId);
+                                if (refreshedNew != null && !string.IsNullOrEmpty(refreshedNew.UUID))
+                                    DatabaseManager.MarkMigration(refreshedNew.UUID, "RutonyChat");
                                 CPH.LogInfo($"[RankSystem] Создан пользователь {user.UserName}: {creditsQty} монет, {timeQty} времени просмотра");
                             }
 
@@ -1884,6 +1915,90 @@ FROM DailyStats;";
             if (!string.Equals(oldUserName, user.UserName, StringComparison.OrdinalIgnoreCase))
             {
                 AddUserNameHistory(uuid, oldUserName, user.UserName);
+            }
+        }
+    }
+
+    // =========================
+    // МИГРАЦИОННАЯ ТАБЛИЦА ДЛЯ ВНЕШНИХ СЕРВИСОВ
+    // =========================
+    private const string MigrationTableName = "ExternalMigrations";
+
+    private static void EnsureMigrationTableExists(SQLiteConnection connection)
+    {
+        using (var cmd = new SQLiteCommand(connection))
+        {
+            cmd.CommandText = $@"CREATE TABLE IF NOT EXISTS {MigrationTableName} (
+                UUID TEXT PRIMARY KEY
+            );";
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    private static void EnsureMigrationColumnExists(SQLiteConnection connection, string columnName)
+    {
+        using (var cmd = new SQLiteCommand(connection))
+        {
+            cmd.CommandText = $"PRAGMA table_info({MigrationTableName});";
+            var existing = new HashSet<string>();
+            using (var reader = cmd.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    existing.Add(reader["name"].ToString());
+                }
+            }
+            if (!existing.Contains(columnName))
+            {
+                cmd.CommandText = $"ALTER TABLE {MigrationTableName} ADD COLUMN {columnName} INTEGER DEFAULT 0;";
+                cmd.ExecuteNonQuery();
+            }
+        }
+    }
+
+    public static void EnsureMigrationInfrastructure(string columnName)
+    {
+        using (var connection = CreateConnection())
+        {
+            connection.Open();
+            EnsureMigrationTableExists(connection);
+            EnsureMigrationColumnExists(connection, columnName);
+        }
+    }
+
+    public static bool HasMigrationMark(string uuid, string columnName)
+    {
+        if (string.IsNullOrEmpty(uuid)) return false;
+        using (var connection = CreateConnection())
+        {
+            connection.Open();
+            EnsureMigrationTableExists(connection);
+            EnsureMigrationColumnExists(connection, columnName);
+            using (var cmd = new SQLiteCommand(connection))
+            {
+                cmd.CommandText = $"SELECT {columnName} FROM {MigrationTableName} WHERE UUID = @UUID";
+                cmd.Parameters.AddWithValue("@UUID", uuid);
+                var result = cmd.ExecuteScalar();
+                if (result == null || result == DBNull.Value) return false;
+                return Convert.ToInt64(result) != 0;
+            }
+        }
+    }
+
+    public static void MarkMigration(string uuid, string columnName)
+    {
+        if (string.IsNullOrEmpty(uuid)) return;
+        using (var connection = CreateConnection())
+        {
+            connection.Open();
+            EnsureMigrationTableExists(connection);
+            EnsureMigrationColumnExists(connection, columnName);
+            using (var cmd = new SQLiteCommand(connection))
+            {
+                cmd.CommandText = $@"INSERT INTO {MigrationTableName} (UUID, {columnName}) VALUES (@UUID, 1)
+                                     ON CONFLICT(UUID) DO UPDATE SET {columnName} = 1";
+                cmd.Parameters.AddWithValue("@UUID", uuid);
+                cmd.ExecuteNonQuery();
             }
         }
     }
