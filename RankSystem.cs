@@ -1628,6 +1628,7 @@ public static class DatabaseManager
 
             // Применяем миграции
             MigrateDailyStatsAddUUID();
+            MigrateDailyStatsDropUsername();
         }
         finally
         {
@@ -1701,6 +1702,92 @@ public static class DatabaseManager
                     )
                     WHERE UUID IS NULL;";
                     cmd.ExecuteNonQuery();
+                }
+            }
+        }
+    }
+
+    // Миграция: удаление колонки Username из таблицы DailyStats
+    private static void MigrateDailyStatsDropUsername()
+    {
+        using (var connection = CreateConnection())
+        {
+            connection.Open();
+            using (var cmd = new SQLiteCommand(connection))
+            {
+                // Проверяем, есть ли колонка Username в DailyStats
+                cmd.CommandText = "PRAGMA table_info(DailyStats);";
+                using (var reader = cmd.ExecuteReader())
+                {
+                    bool hasUsername = false;
+                    while (reader.Read())
+                    {
+                        if (reader["name"].ToString() == "Username")
+                        {
+                            hasUsername = true;
+                            break;
+                        }
+                    }
+                    reader.Close();
+
+                    if (!hasUsername)
+                    {
+                        return; // Нечего мигрировать
+                    }
+                }
+
+                // Пересоздаем таблицу без Username
+                using (var transaction = connection.BeginTransaction())
+                {
+                    try
+                    {
+                        cmd.Transaction = transaction;
+
+                        // Создаем новую таблицу без Username
+                        cmd.CommandText = @"
+CREATE TABLE IF NOT EXISTS DailyStats_new (
+    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+    UUID TEXT,
+    Date TEXT NOT NULL,
+    ServiceUserId TEXT NOT NULL,
+    Service TEXT NOT NULL,
+    WatchTime INTEGER DEFAULT 0,
+    MessageCount INTEGER DEFAULT 0,
+    Coins INTEGER DEFAULT 0,
+    SpentCoins INTEGER DEFAULT 0,
+    UNIQUE(Date, ServiceUserId, Service)
+);";
+                        cmd.ExecuteNonQuery();
+
+                        // Копируем данные без Username
+                        cmd.CommandText = @"
+INSERT INTO DailyStats_new (Id, UUID, Date, ServiceUserId, Service, WatchTime, MessageCount, Coins, SpentCoins)
+SELECT Id, UUID, Date, ServiceUserId, Service, WatchTime, MessageCount, Coins, SpentCoins
+FROM DailyStats;";
+                        cmd.ExecuteNonQuery();
+
+                        // Удаляем старую таблицу и переименовываем новую
+                        cmd.CommandText = "DROP TABLE DailyStats;";
+                        cmd.ExecuteNonQuery();
+
+                        cmd.CommandText = "ALTER TABLE DailyStats_new RENAME TO DailyStats;";
+                        cmd.ExecuteNonQuery();
+
+                        // Пересоздаем индексы
+                        cmd.CommandText = "CREATE INDEX IF NOT EXISTS idx_dailystats_date ON DailyStats(Date);";
+                        cmd.ExecuteNonQuery();
+                        cmd.CommandText = "CREATE INDEX IF NOT EXISTS idx_dailystats_user ON DailyStats(ServiceUserId, Service);";
+                        cmd.ExecuteNonQuery();
+                        cmd.CommandText = "CREATE INDEX IF NOT EXISTS idx_dailystats_date_user ON DailyStats(Date, ServiceUserId, Service);";
+                        cmd.ExecuteNonQuery();
+
+                        transaction.Commit();
+                    }
+                    catch
+                    {
+                        transaction.Rollback();
+                        throw;
+                    }
                 }
             }
         }
