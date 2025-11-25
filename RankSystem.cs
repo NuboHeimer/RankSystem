@@ -170,7 +170,7 @@ public class CPHInline
             if (!CPH.TryGetArg("coinsToAdd", out long coinsToAdd))
                 coinsToAdd = RankSystemConfig.DEFAULT_COINS_TO_ADD;
             user.Coins += coinsToAdd;
-            DatabaseManager.UpsertUser(user);
+            DatabaseManager.UpsertUser(user, this);
 
             // Обновляем дневную статистику
             string today = DateTime.Now.ToString("yyyy-MM-dd");
@@ -228,7 +228,7 @@ public class CPHInline
                     coinsToAdd = RankSystemConfig.DEFAULT_COINS_TO_ADD;
                 user.Coins += coinsToAdd;
                 user.WatchTime += timeToAdd;
-                DatabaseManager.UpsertUser(user);
+                DatabaseManager.UpsertUser(user, this);
 
                 // Обновляем дневную статистику
                 string today = DateTime.Now.ToString("yyyy-MM-dd");
@@ -273,7 +273,7 @@ public class CPHInline
                 followDate = DateTime.Now;
             user.FollowDate = followDate;
             user.Coins += coinsToAdd;
-            DatabaseManager.UpsertUser(user);
+            DatabaseManager.UpsertUser(user, this);
             return true;
         }
         catch (Exception ex)
@@ -414,7 +414,7 @@ public class CPHInline
             if (!CPH.TryGetArg("coinsToAdd", out coinsFromArgs))
                 coinsFromArgs = RankSystemConfig.DEFAULT_COINS_TO_ADD;
             user.Coins += coinsFromArgs;
-            DatabaseManager.UpsertUser(user);
+            DatabaseManager.UpsertUser(user, this);
 
             // Обновляем дневную статистику
             string today = DateTime.Now.ToString("yyyy-MM-dd");
@@ -1871,7 +1871,7 @@ FROM DailyStats;";
         }
     }
 
-    public static void UpsertUser(UserData user)
+    public static void UpsertUser(UserData user, CPHInline cph = null)
     {
         // Логируем входные данные для отладки
         System.Diagnostics.Debug.WriteLine($"[RankSystem] UpsertUser called for user: {user.UserName} ({user.Service}), GameWhenFollow: '{user.GameWhenFollow}'");
@@ -2020,7 +2020,7 @@ FROM DailyStats;";
             // Дополнительная проверка: убеждаемся, что имена действительно разные
             if (!string.Equals(oldUserName, user.UserName, StringComparison.OrdinalIgnoreCase))
             {
-                AddUserNameHistory(uuid, oldUserName, user.UserName);
+                AddUserNameHistory(uuid, oldUserName, user.UserName, user.Service, cph);
             }
         }
     }
@@ -2309,7 +2309,7 @@ FROM DailyStats;";
         {
             if (!string.Equals(oldUserName, user.UserName, StringComparison.OrdinalIgnoreCase))
             {
-                AddUserNameHistory(uuid, oldUserName, user.UserName);
+                AddUserNameHistory(uuid, oldUserName, user.UserName, user.Service);
             }
         }
 
@@ -2362,7 +2362,7 @@ FROM DailyStats;";
         return GetUserData(filter: $"{topType} > 0 ORDER BY {orderBy} LIMIT @limit", parameters: new[] { new SQLiteParameter("@limit", limit) });
     }
 
-    public static void AddUserNameHistory(string uuid, string oldUserName, string newUserName)
+    public static void AddUserNameHistory(string uuid, string oldUserName, string newUserName, string service = null, CPHInline cph = null)
     {
         _historyLock.EnterWriteLock();
         try
@@ -2386,6 +2386,38 @@ FROM DailyStats;";
         finally
         {
             _historyLock.ExitWriteLock();
+        }
+
+        // Формируем событие о смене ника в отдельном try-catch, чтобы не прерывать выполнение
+        // Событие создается только если передан экземпляр CPHInline
+        if (cph != null && cph.CPH != null)
+        {
+            try
+            {
+                cph.CPH.LogInfo($"[RankSystem] Попытка создать событие о смене никнейма: {oldUserName} → {newUserName}");
+
+                cph.CPH.SetArgument("service", service ?? "RankSystem");
+                cph.CPH.SetArgument("title", "Смена никнейма");
+                cph.CPH.SetArgument("message", $"{oldUserName} → {newUserName}");
+
+                cph.CPH.ExecuteMethod("MiniChat Method Collection", "CreateCustomEvent");
+
+                cph.CPH.LogInfo($"[RankSystem] Событие о смене никнейма создано: {oldUserName} → {newUserName}");
+
+                Thread.Sleep(200); // Без задержки лента миничата пропускает часть событий.
+            }
+            catch (Exception ex)
+            {
+                // Логируем ошибку, но не прерываем выполнение
+                try
+                {
+                    cph.CPH.LogError($"[RankSystem] Не удалось создать событие о смене никнейма ({oldUserName} → {newUserName}): {ex.Message}. StackTrace: {ex.StackTrace}");
+                }
+                catch
+                {
+                    // Игнорируем ошибки логирования
+                }
+            }
         }
     }
 
