@@ -969,7 +969,7 @@ public class CPHInline
             {
                 sourceConnection.Open();
 
-                using (var cmd = new SQLiteCommand("SELECT CreditsQty, TimeQty FROM ChatterRank WHERE Nickname = @Nickname", sourceConnection))
+                using (var cmd = new SQLiteCommand("SELECT CreditsQty, TimeQty, MessageQty FROM ChatterRank WHERE Nickname = @Nickname", sourceConnection))
                 {
                     cmd.Parameters.AddWithValue("@Nickname", user.UserName.ToLower());
 
@@ -980,6 +980,7 @@ public class CPHInline
                             // Валидация и безопасное преобразование данных из старой БД
                             long creditsQty = 0;
                             long timeQty = 0;
+                            long messageQty = 0;
 
                             try
                             {
@@ -1009,6 +1010,20 @@ public class CPHInline
                                 timeQty = 0;
                             }
 
+                            try
+                            {
+                                var messageObj = reader["MessageQty"];
+                                if (messageObj != null && messageObj != DBNull.Value)
+                                {
+                                    messageQty = Convert.ToInt64(messageObj);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                CPH.LogWarn($"[RankSystem] Ошибка преобразования MessageQty для {user.UserName}: {ex.Message}");
+                                messageQty = 0;
+                            }
+
                             // Валидация: проверяем на отрицательные значения
                             if (creditsQty < 0)
                             {
@@ -1022,6 +1037,12 @@ public class CPHInline
                                 timeQty = 0;
                             }
 
+                            if (messageQty < 0)
+                            {
+                                CPH.LogWarn($"[RankSystem] Обнаружено отрицательное значение MessageQty ({messageQty}) для {user.UserName}, устанавливаем 0");
+                                messageQty = 0;
+                            }
+
                             // Подготавливаем данные пользователя для миграции
                             UserData userToMigrate;
                             if (existingUser != null)
@@ -1030,6 +1051,7 @@ public class CPHInline
                                 userToMigrate = existingUser;
                                 userToMigrate.Coins += creditsQty;
                                 userToMigrate.WatchTime += timeQty;
+                                userToMigrate.MessageCount += messageQty;
                                 // Обновляем имя пользователя, если оно изменилось
                                 if (!string.IsNullOrEmpty(user.UserName) && !string.Equals(userToMigrate.UserName, user.UserName, StringComparison.OrdinalIgnoreCase))
                                 {
@@ -1042,7 +1064,7 @@ public class CPHInline
                                 userToMigrate = user;
                                 userToMigrate.Coins = creditsQty;
                                 userToMigrate.WatchTime = timeQty;
-                                userToMigrate.MessageCount = 0;
+                                userToMigrate.MessageCount = messageQty;
                                 userToMigrate.FollowDate = DateTime.MinValue;
                                 userToMigrate.GameWhenFollow = "";
                             }
@@ -1058,16 +1080,17 @@ public class CPHInline
 
                             if (existingUser != null)
                             {
-                                CPH.LogInfo($"[RankSystem] Обновлен пользователь {user.UserName}: +{creditsQty} монет, +{timeQty} времени просмотра");
+                                CPH.LogInfo($"[RankSystem] Обновлен пользователь {user.UserName}: +{creditsQty} монет, +{timeQty} времени просмотра, +{messageQty} сообщений");
                             }
                             else
                             {
-                                CPH.LogInfo($"[RankSystem] Создан пользователь {user.UserName}: {creditsQty} монет, {timeQty} времени просмотра");
+                                CPH.LogInfo($"[RankSystem] Создан пользователь {user.UserName}: {creditsQty} монет, {timeQty} времени просмотра, {messageQty} сообщений");
                             }
 
                             // Устанавливаем аргументы для использования в других действиях
                             CPH.SetArgument("migratedCredits", creditsQty);
                             CPH.SetArgument("migratedTime", timeQty);
+                            CPH.SetArgument("migratedMessages", messageQty);
                             CPH.SetArgument("migratedUserName", user.UserName);
 
                             return true;
@@ -2101,18 +2124,32 @@ FROM DailyStats;";
         ).FirstOrDefault();
 
         // Расчет дельты для инкрементов
+        // Для миграции используем прямую установку значений, а не инкременты
         bool isMessageIncrement = false;
         long coinsToAdd = 0;
+        long messagesToAdd = 0;
         string oldUserName = null;
         string uuid = null;
 
         if (existingUser != null)
         {
-            if (user.MessageCount > existingUser.MessageCount)
+            // Для миграции: устанавливаем значения напрямую
+            // Для обычных операций: используем инкременты
+            if (!string.IsNullOrEmpty(migrationColumnName))
             {
-                isMessageIncrement = true;
+                // Миграция: устанавливаем итоговые значения
+                coinsToAdd = user.Coins - existingUser.Coins;
+                messagesToAdd = user.MessageCount - existingUser.MessageCount;
             }
-            coinsToAdd = user.Coins - existingUser.Coins;
+            else
+            {
+                // Обычная операция: инкременты
+                if (user.MessageCount > existingUser.MessageCount)
+                {
+                    isMessageIncrement = true;
+                }
+                coinsToAdd = user.Coins - existingUser.Coins;
+            }
             uuid = existingUser.UUID;
 
             // Проверяем, изменился ли никнейм
@@ -2154,10 +2191,18 @@ FROM DailyStats;";
                                 SET UserName = @UserName,
                                     WatchTime = @WatchTime,
                                     Coins = Coins + @CoinsToAdd";
-                                if (isMessageIncrement)
+
+                                // Для миграции: устанавливаем MessageCount напрямую
+                                // Для обычных операций: используем инкремент
+                                if (!string.IsNullOrEmpty(migrationColumnName))
+                                {
+                                    updateQuery += ", MessageCount = MessageCount + @MessagesToAdd";
+                                }
+                                else if (isMessageIncrement)
                                 {
                                     updateQuery += ", MessageCount = MessageCount + 1";
                                 }
+
                                 if (user.FollowDate > DateTime.MinValue)
                                 {
                                     updateQuery += ", FollowDate = @FollowDate";
@@ -2178,6 +2223,13 @@ FROM DailyStats;";
                                 cmd.Parameters.AddWithValue("@UserName", user.UserName);
                                 cmd.Parameters.AddWithValue("@WatchTime", user.WatchTime);
                                 cmd.Parameters.AddWithValue("@CoinsToAdd", coinsToAdd);
+
+                                // Для миграции: добавляем параметр MessagesToAdd
+                                if (!string.IsNullOrEmpty(migrationColumnName))
+                                {
+                                    cmd.Parameters.AddWithValue("@MessagesToAdd", messagesToAdd);
+                                }
+
                                 if (user.FollowDate > DateTime.MinValue)
                                 {
                                     cmd.Parameters.AddWithValue("@FollowDate", user.FollowDate.ToString("o"));
