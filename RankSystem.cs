@@ -950,6 +950,18 @@ public class CPHInline
                 return false;
             }
 
+            // Проверяем миграцию ДО чтения из старой базы (защита от race condition)
+            var existingUser = RankSystemInternal.GetExistingUser(user.Service, user.ServiceUserId);
+            if (existingUser != null && DatabaseManager.HasMigrationMark(existingUser.UUID, "RutonyChat"))
+            {
+                CPH.LogInfo($"[RankSystem] Пропуск: уже мигрирован {user.UserName} из RutonyChat");
+                return true;
+            }
+
+            // Также проверяем миграцию для случая, когда пользователь еще не существует в новой базе
+            // но мог быть мигрирован ранее и затем удален (проверяем по UUID из старой миграции)
+            // Это сложно реализовать без дополнительной таблицы связи, поэтому полагаемся на проверку выше
+
             CPH.LogInfo($"[RankSystem] Ищем данные для пользователя {user.UserName} в {ranksDbPath}...");
 
             // Ищем пользователя в базе ranks.db по нику
@@ -965,44 +977,91 @@ public class CPHInline
                     {
                         if (reader.Read())
                         {
-                            var creditsQty = Convert.ToInt64(reader["CreditsQty"] ?? 0);
-                            var timeQty = Convert.ToInt64(reader["TimeQty"] ?? 0);
+                            // Валидация и безопасное преобразование данных из старой БД
+                            long creditsQty = 0;
+                            long timeQty = 0;
 
-                            // Получаем существующего пользователя из нашей базы
-                            var existingUser = RankSystemInternal.GetExistingUser(user.Service, user.ServiceUserId);
-
-                            // Если уже есть отметка миграции для этого пользователя, пропускаем
-                            if (existingUser != null && DatabaseManager.HasMigrationMark(existingUser.UUID, "RutonyChat"))
+                            try
                             {
-                                CPH.LogInfo($"[RankSystem] Пропуск: уже мигрирован {user.UserName} из RutonyChat");
-                                return true;
+                                var creditsObj = reader["CreditsQty"];
+                                if (creditsObj != null && creditsObj != DBNull.Value)
+                                {
+                                    creditsQty = Convert.ToInt64(creditsObj);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                CPH.LogWarn($"[RankSystem] Ошибка преобразования CreditsQty для {user.UserName}: {ex.Message}");
+                                creditsQty = 0;
                             }
 
+                            try
+                            {
+                                var timeObj = reader["TimeQty"];
+                                if (timeObj != null && timeObj != DBNull.Value)
+                                {
+                                    timeQty = Convert.ToInt64(timeObj);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                CPH.LogWarn($"[RankSystem] Ошибка преобразования TimeQty для {user.UserName}: {ex.Message}");
+                                timeQty = 0;
+                            }
+
+                            // Валидация: проверяем на отрицательные значения
+                            if (creditsQty < 0)
+                            {
+                                CPH.LogWarn($"[RankSystem] Обнаружено отрицательное значение CreditsQty ({creditsQty}) для {user.UserName}, устанавливаем 0");
+                                creditsQty = 0;
+                            }
+
+                            if (timeQty < 0)
+                            {
+                                CPH.LogWarn($"[RankSystem] Обнаружено отрицательное значение TimeQty ({timeQty}) для {user.UserName}, устанавливаем 0");
+                                timeQty = 0;
+                            }
+
+                            // Подготавливаем данные пользователя для миграции
+                            UserData userToMigrate;
                             if (existingUser != null)
                             {
                                 // Обновляем существующего пользователя
-                                existingUser.Coins += creditsQty;
-                                existingUser.WatchTime += timeQty;
-                                DatabaseManager.UpsertUser(existingUser);
-                                // Отмечаем успешную миграцию
-                                var refreshed = RankSystemInternal.GetExistingUser(existingUser.Service, existingUser.ServiceUserId);
-                                if (refreshed != null && !string.IsNullOrEmpty(refreshed.UUID))
-                                    DatabaseManager.MarkMigration(refreshed.UUID, "RutonyChat");
-                                CPH.LogInfo($"[RankSystem] Обновлен пользователь {user.UserName}: +{creditsQty} монет, +{timeQty} времени просмотра");
+                                userToMigrate = existingUser;
+                                userToMigrate.Coins += creditsQty;
+                                userToMigrate.WatchTime += timeQty;
+                                // Обновляем имя пользователя, если оно изменилось
+                                if (!string.IsNullOrEmpty(user.UserName) && !string.Equals(userToMigrate.UserName, user.UserName, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    userToMigrate.UserName = user.UserName;
+                                }
                             }
                             else
                             {
                                 // Создаем нового пользователя
-                                user.Coins = creditsQty;
-                                user.WatchTime = timeQty;
-                                user.MessageCount = 0;
-                                user.FollowDate = DateTime.MinValue;
-                                user.GameWhenFollow = "";
-                                DatabaseManager.UpsertUser(user);
-                                // Отмечаем успешную миграцию
-                                var refreshedNew = RankSystemInternal.GetExistingUser(user.Service, user.ServiceUserId);
-                                if (refreshedNew != null && !string.IsNullOrEmpty(refreshedNew.UUID))
-                                    DatabaseManager.MarkMigration(refreshedNew.UUID, "RutonyChat");
+                                userToMigrate = user;
+                                userToMigrate.Coins = creditsQty;
+                                userToMigrate.WatchTime = timeQty;
+                                userToMigrate.MessageCount = 0;
+                                userToMigrate.FollowDate = DateTime.MinValue;
+                                userToMigrate.GameWhenFollow = "";
+                            }
+
+                            // Атомарная миграция: UpsertUser + MarkMigration в одной транзакции
+                            string migratedUuid = DatabaseManager.MigrateUserData(userToMigrate, "RutonyChat");
+
+                            if (string.IsNullOrEmpty(migratedUuid))
+                            {
+                                CPH.LogError($"[RankSystem] Ошибка при миграции пользователя {user.UserName}");
+                                return false;
+                            }
+
+                            if (existingUser != null)
+                            {
+                                CPH.LogInfo($"[RankSystem] Обновлен пользователь {user.UserName}: +{creditsQty} монет, +{timeQty} времени просмотра");
+                            }
+                            else
+                            {
                                 CPH.LogInfo($"[RankSystem] Создан пользователь {user.UserName}: {creditsQty} монет, {timeQty} времени просмотра");
                             }
 
@@ -2001,6 +2060,184 @@ FROM DailyStats;";
                 cmd.ExecuteNonQuery();
             }
         }
+    }
+
+    // Внутренний метод для отметки миграции в существующей транзакции
+    // connection: Существующее подключение к БД
+    // transaction: Существующая транзакция
+    // uuid: UUID пользователя
+    // columnName: Название колонки миграции
+    private static void MarkMigrationInternal(SQLiteConnection connection, SQLiteTransaction transaction, string uuid, string columnName)
+    {
+        if (string.IsNullOrEmpty(uuid)) return;
+        EnsureMigrationTableExists(connection);
+        EnsureMigrationColumnExists(connection, columnName);
+        using (var cmd = new SQLiteCommand(connection))
+        {
+            cmd.Transaction = transaction;
+            cmd.CommandText = $@"INSERT INTO {MigrationTableName} (UUID, {columnName}) VALUES (@UUID, 1)
+                                 ON CONFLICT(UUID) DO UPDATE SET {columnName} = 1";
+            cmd.Parameters.AddWithValue("@UUID", uuid);
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    // Атомарная миграция пользователя с отметкой миграции в одной транзакции
+    // user: Данные пользователя для миграции
+    // migrationColumnName: Название колонки миграции (например, "RutonyChat")
+    // Возвращает: UUID пользователя после миграции или null в случае ошибки
+    public static string MigrateUserData(UserData user, string migrationColumnName)
+    {
+        if (user == null || string.IsNullOrEmpty(migrationColumnName))
+            return null;
+
+        // Получаем данные о пользователе ДО входа в блокировку записи
+        var existingUser = GetUserData(
+            filter: "Service = @Service AND ServiceUserId = @ServiceUserId",
+            parameters: new[] {
+                new SQLiteParameter("@Service", user.Service),
+                new SQLiteParameter("@ServiceUserId", user.ServiceUserId)
+            }
+        ).FirstOrDefault();
+
+        // Расчет дельты для инкрементов
+        bool isMessageIncrement = false;
+        long coinsToAdd = 0;
+        string oldUserName = null;
+        string uuid = null;
+
+        if (existingUser != null)
+        {
+            if (user.MessageCount > existingUser.MessageCount)
+            {
+                isMessageIncrement = true;
+            }
+            coinsToAdd = user.Coins - existingUser.Coins;
+            uuid = existingUser.UUID;
+
+            // Проверяем, изменился ли никнейм
+            if (!string.Equals(existingUser.UserName, user.UserName, StringComparison.OrdinalIgnoreCase))
+            {
+                oldUserName = existingUser.UserName;
+            }
+        }
+        else
+        {
+            // Новый пользователь
+            coinsToAdd = user.Coins;
+            if (string.IsNullOrEmpty(user.UUID))
+            {
+                user.UUID = Guid.NewGuid().ToString();
+            }
+            uuid = user.UUID;
+        }
+
+        _lock.EnterWriteLock();
+        try
+        {
+            using (var connection = CreateConnection())
+            {
+                connection.Open();
+                using (var transaction = connection.BeginTransaction())
+                {
+                    try
+                    {
+                        using (var cmd = new SQLiteCommand(connection))
+                        {
+                            cmd.Transaction = transaction;
+
+                            if (existingUser != null)
+                            {
+                                // Обновление существующего пользователя
+                                string updateQuery = @"
+                                UPDATE Users 
+                                SET UserName = @UserName,
+                                    WatchTime = @WatchTime,
+                                    Coins = Coins + @CoinsToAdd";
+                                if (isMessageIncrement)
+                                {
+                                    updateQuery += ", MessageCount = MessageCount + 1";
+                                }
+                                if (user.FollowDate > DateTime.MinValue)
+                                {
+                                    updateQuery += ", FollowDate = @FollowDate";
+                                }
+                                if (!string.IsNullOrEmpty(user.GameWhenFollow))
+                                {
+                                    updateQuery += ", GameWhenFollow = @GameWhenFollow";
+                                }
+                                else
+                                {
+                                    updateQuery += ", GameWhenFollow = NULL";
+                                }
+                                updateQuery += " WHERE Service = @Service AND ServiceUserId = @ServiceUserId";
+
+                                cmd.CommandText = updateQuery;
+                                cmd.Parameters.AddWithValue("@Service", user.Service);
+                                cmd.Parameters.AddWithValue("@ServiceUserId", user.ServiceUserId);
+                                cmd.Parameters.AddWithValue("@UserName", user.UserName);
+                                cmd.Parameters.AddWithValue("@WatchTime", user.WatchTime);
+                                cmd.Parameters.AddWithValue("@CoinsToAdd", coinsToAdd);
+                                if (user.FollowDate > DateTime.MinValue)
+                                {
+                                    cmd.Parameters.AddWithValue("@FollowDate", user.FollowDate.ToString("o"));
+                                }
+                                if (!string.IsNullOrEmpty(user.GameWhenFollow))
+                                {
+                                    cmd.Parameters.AddWithValue("@GameWhenFollow", user.GameWhenFollow);
+                                }
+                                cmd.ExecuteNonQuery();
+                            }
+                            else
+                            {
+                                // Вставка нового пользователя
+                                cmd.CommandText = @"
+                                INSERT INTO Users 
+                                (UUID, Service, ServiceUserId, UserName, WatchTime, FollowDate, MessageCount, Coins, GameWhenFollow)
+                                VALUES (
+                                    @UUID, @Service, @ServiceUserId, @UserName, @WatchTime, @FollowDate, @MessageCount, @Coins, @GameWhenFollow
+                                )";
+                                cmd.Parameters.AddWithValue("@UUID", user.UUID);
+                                cmd.Parameters.AddWithValue("@Service", user.Service);
+                                cmd.Parameters.AddWithValue("@ServiceUserId", user.ServiceUserId);
+                                cmd.Parameters.AddWithValue("@UserName", user.UserName);
+                                cmd.Parameters.AddWithValue("@WatchTime", user.WatchTime);
+                                cmd.Parameters.AddWithValue("@FollowDate", user.FollowDate.ToString("o"));
+                                cmd.Parameters.AddWithValue("@MessageCount", user.MessageCount);
+                                cmd.Parameters.AddWithValue("@Coins", user.Coins);
+                                cmd.Parameters.AddWithValue("@GameWhenFollow", user.GameWhenFollow ?? (object)DBNull.Value);
+                                cmd.ExecuteNonQuery();
+                            }
+
+                            // Отмечаем миграцию в той же транзакции
+                            MarkMigrationInternal(connection, transaction, uuid, migrationColumnName);
+                        }
+
+                        transaction.Commit();
+                    }
+                    catch
+                    {
+                        transaction.Rollback();
+                        throw;
+                    }
+                }
+            }
+        }
+        finally
+        {
+            _lock.ExitWriteLock();
+        }
+
+        // Если изменился никнейм, добавляем запись в историю после завершения основной транзакции
+        if (oldUserName != null && uuid != null && !string.IsNullOrEmpty(user.UserName))
+        {
+            if (!string.Equals(oldUserName, user.UserName, StringComparison.OrdinalIgnoreCase))
+            {
+                AddUserNameHistory(uuid, oldUserName, user.UserName);
+            }
+        }
+
+        return uuid;
     }
 
     public static List<UserData> GetUserData(string filter = null, SQLiteParameter[] parameters = null)
