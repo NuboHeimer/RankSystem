@@ -1087,6 +1087,30 @@ public class CPHInline
                                 CPH.LogInfo($"[RankSystem] Создан пользователь {user.UserName}: {creditsQty} монет, {timeQty} времени просмотра, {messageQty} сообщений");
                             }
 
+                            // Удаляем запись из старой базы после успешной миграции
+                            // Это предотвращает повторную миграцию на другие площадки
+                            try
+                            {
+                                using (var deleteCmd = new SQLiteCommand("DELETE FROM ChatterRank WHERE Nickname = @Nickname", sourceConnection))
+                                {
+                                    deleteCmd.Parameters.AddWithValue("@Nickname", user.UserName.ToLower());
+                                    int deletedRows = deleteCmd.ExecuteNonQuery();
+                                    if (deletedRows > 0)
+                                    {
+                                        CPH.LogInfo($"[RankSystem] Запись пользователя {user.UserName} удалена из старой базы {ranksDbPath}");
+                                    }
+                                    else
+                                    {
+                                        CPH.LogWarn($"[RankSystem] Запись пользователя {user.UserName} не найдена в старой базе для удаления");
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                // Логируем ошибку, но не прерываем выполнение, так как миграция уже успешна
+                                CPH.LogWarn($"[RankSystem] Не удалось удалить запись из старой базы для {user.UserName}: {ex.Message}");
+                            }
+
                             // Устанавливаем аргументы для использования в других действиях
                             CPH.SetArgument("migratedCredits", creditsQty);
                             CPH.SetArgument("migratedTime", timeQty);
